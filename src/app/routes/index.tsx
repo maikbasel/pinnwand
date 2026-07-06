@@ -29,7 +29,7 @@ function BoardsIndex() {
         >
           <p className="font-medium">Demo-Board</p>
           <p className="mt-1 text-muted-foreground text-sm">
-            Beispiel — öffnen, um die vier Spalten zu sehen.
+            Beispiel: öffnen, um die vier Spalten zu sehen.
           </p>
         </Link>
       </div>

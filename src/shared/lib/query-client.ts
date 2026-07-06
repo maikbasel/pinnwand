@@ -13,8 +13,8 @@ import { PERSIST_MAX_AGE_MS } from "./idb-persister";
 const AUTH_ERROR_PATTERN = /JWT|auth/i;
 
 // Query-key first segments whose data must be available offline (the board
-// surface). Everything else — the auth session, and any join-code/sharing
-// sub-trees — stays out of the persisted blob.
+// surface). Everything else stays out of the persisted blob: the auth session,
+// and any join-code/sharing sub-trees.
 const OFFLINE_QUERY_ROOTS: ReadonlySet<string> = new Set([
   "boards",
   "tasks",
@@ -133,7 +133,7 @@ export const queryClient = new QueryClient({
     },
   }),
   queryCache: new QueryCache({
-    // Queries default to no toast — most query errors are surfaced inline
+    // Queries default to no toast; most query errors are surfaced inline
     // (skeletons / empty states / inline error text) by the consumer hook.
   }),
 });

@@ -41,7 +41,7 @@ const idbStorage: AsyncStorage<string> = {
  * cache per user via the `buster`: a blob written by user A carries A's id in
  * its buster, so when user B launches the app, TanStack's buster check fails to
  * match and the blob is discarded rather than hydrated into B's session. Never
- * throws — an unreadable/absent session yields the anonymous partition.
+ * throws; an unreadable or absent session yields the anonymous partition.
  */
 export function startupUserId(): string | null {
   try {

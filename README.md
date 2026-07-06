@@ -1,6 +1,6 @@
 # Pinnwand
 
-> Shared Kanban task boards, mobile-first PWA. Create a board, share it with a join code, drag Aufgaben across four columns — Offen, Zu Erledigen, In Bearbeitung, Erledigt — synced in real time.
+> Shared Kanban task boards in a mobile-first PWA. Create a board, share it with a join code, and drag Aufgaben across four columns (Offen, Zu Erledigen, In Bearbeitung, Erledigt), synced in real time.
 
 Scaffolded from the [Mahlzeit](../mahlzeit) template: React 19 + Vite + Tailwind 4, shadcn/ui, TanStack Query/Router, dnd-kit, Supabase, PWA. Theme: [Modern Minimal](https://tweakcn.com/editor/theme?theme=modern-minimal) (tweakcn).
 
@@ -10,7 +10,7 @@ Scaffolded from the [Mahlzeit](../mahlzeit) template: React 19 + Vite + Tailwind
 - Fixed columns: **Offen · Zu Erledigen · In Bearbeitung · Erledigt**.
 - Tasks with Titel, Beschreibung, Priorität (Niedrig/Mittel/Hoch), Fälligkeitsdatum, and multiple **Verantwortliche**.
 - Drag between columns and reorder within, optimistic + realtime.
-- Passwordless sign-in (magic link + OTP). Self-serve signup disabled — operators add users in Supabase Studio.
+- Passwordless sign-in (magic link + OTP). Self-serve signup is disabled; an operator adds users in Supabase Studio.
 - Installable PWA, mobile-first.
 
 ## Getting started
@@ -39,4 +39,4 @@ See `CLAUDE.md` for the full list. Common: `pnpm dev`, `pnpm build`, `pnpm check
 
 ## Status
 
-Skeleton: stack, config, theme, feature-slice structure, and the initial schema (boards, members, tasks, assignees, RLS, RPCs) are in place. Feature slices (`auth`, `boards`, `members`, `tasks`) are stubbed — see `docs/superpowers/specs/` for the design and the implementation plan.
+Skeleton: stack, config, theme, feature-slice structure, and the initial schema (boards, members, tasks, assignees, RLS, RPCs) are in place. Feature slices (`auth`, `boards`, `members`, `tasks`) are stubbed. See `docs/superpowers/specs/` for the design and the implementation plan.

@@ -28,7 +28,7 @@ if (typeof navigator !== "undefined") {
 
 // NOTE: each offline-first feature registers its resumable mutation defaults
 // here (via queryClient.setMutationDefaults) BEFORE the persister resumes a
-// write queued in a prior offline session — a resumed mutation has no React
+// write queued in a prior offline session. A resumed mutation has no React
 // hook to supply its mutationFn. The `tasks` slice will add
 // `registerTaskMutationDefaults(queryClient)` at this point.
 
@@ -74,8 +74,8 @@ createRoot(rootElement).render(
       onSuccess={() => {
         // Restore finished: replay any task mutations queued in a prior offline
         // session. Reconnect-driven resume is automatic; this covers the
-        // cold-start-after-restart path. Fire-and-forget with explicit handlers
-        // — failures surface through the global MutationCache.onError.
+        // cold-start-after-restart path. Fire-and-forget with explicit
+        // handlers; failures surface through the global MutationCache.onError.
         queryClient.resumePausedMutations().then(noop, noop);
       }}
       persistOptions={persistOptions}

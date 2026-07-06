@@ -1,4 +1,4 @@
-// PLACEHOLDER — regenerate with `pnpm db:types` once the local Supabase stack is
+// PLACEHOLDER. Regenerate with `pnpm db:types` once the local Supabase stack is
 // running (supabase gen types typescript --local). Never edit by hand.
 export type Json =
   | string

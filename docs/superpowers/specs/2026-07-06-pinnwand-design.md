@@ -1,4 +1,4 @@
-# Pinnwand — Design
+# Pinnwand Design
 
 **Date:** 2026-07-06
 **Status:** Approved (skeleton scaffolded)
@@ -27,7 +27,7 @@ RPCs (SECURITY DEFINER): `create_board(name)`, `join_board_by_code(code)`, `rege
 - `task` (Aufgabe): `id, board_id, column, title, description, priority, due_date (nullable), position, created_by, created_at, updated_at`
 - `column` enum (fixed): `offen | zu_erledigen | in_bearbeitung | erledigt` → **Offen / Zu Erledigen / In Bearbeitung / Erledigt**
 - `priority` enum: `niedrig | mittel | hoch`
-- `task_assignees`: `(task_id, user_id) PK` — many-to-many Verantwortliche, from board members
+- `task_assignees`: `(task_id, user_id) PK`. Many-to-many Verantwortliche, from board members
 - `position`: fractional index for drag-reorder within a column
 
 ## Interaction
@@ -37,15 +37,15 @@ RPCs (SECURITY DEFINER): `create_board(name)`, `join_board_by_code(code)`, `rege
 
 ## Auth
 
-Passwordless — magic link + 6-digit OTP fallback. **Self-serve signup disabled**; operators add users via Supabase Studio / admin API. Identity source of truth is `public.profiles`, seeded by an `on_auth_user_created` trigger.
+Passwordless: magic link plus a 6-digit OTP fallback. **Self-serve signup is disabled**; an operator adds users via Supabase Studio or the admin API. The source of truth for identity is `public.profiles`, seeded by an `on_auth_user_created` trigger.
 
 ## Feature slices
 
-`auth`, `boards`, `members`, `tasks`, `appearance`, `navigation`, `profile` — each a vertical slice (`components/`, `hooks/`, `api/`, `index.ts`). Layer boundaries per `.claude/rules/architecture.md`.
+`auth`, `boards`, `members`, `tasks`, `appearance`, `navigation`, `profile`. Each is a vertical slice (`components/`, `hooks/`, `api/`, `index.ts`). Layer boundaries per `.claude/rules/architecture.md`.
 
 ## Offline-first (required)
 
-The board surface is offline-first, ported from Mahlzeit: the TanStack Query cache + paused task mutations persist to IndexedDB (`@tanstack/react-query-persist-client` over an `idb-keyval` async persister). A cold offline launch renders boards from the persisted cache; task writes pause offline and resume on reconnect. Persistence is an allowlist — board/task/member/profile reads and `tasks` mutations only; never the auth session or join/sharing calls. Per-user `buster` partitions the cache on shared devices; purged on sign-out. Wiring: `src/shared/lib/idb-persister.ts`, `query-client.ts`, `PersistQueryClientProvider` in `main.tsx`.
+The board surface is offline-first, ported from Mahlzeit: the TanStack Query cache and paused task mutations persist to IndexedDB (`@tanstack/react-query-persist-client` over an `idb-keyval` async persister). A cold offline launch renders boards from the persisted cache; task writes pause offline and resume on reconnect. Persistence is an allowlist covering board/task/member/profile reads and `tasks` mutations only, never the auth session or join/sharing calls. A per-user `buster` partitions the cache on shared devices and purges it on sign-out. Wiring lives in `src/shared/lib/idb-persister.ts`, `query-client.ts`, and `PersistQueryClientProvider` in `main.tsx`.
 
 ## Out of scope (v1)
 
