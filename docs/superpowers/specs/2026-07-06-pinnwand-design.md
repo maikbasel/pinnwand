@@ -53,4 +53,4 @@ Notifications, Bring!-style exports, passkeys, comments/attachments, custom colu
 
 ## Skeleton delivered
 
-Project scaffold, all config (Vite/TS/Tailwind/Biome/PWA/components.json), theme in `index.css`, feature-slice folders with stub `index.ts`, Supabase client + `config.toml`, the initial migration (`0001_init.sql` — sequential numbering, no timestamps: enums, tables, RLS, RPCs, triggers), the offline-first persistence wiring, and a booting app shell (boards list placeholder + a board view rendering the four columns). Feature behaviour is the next milestone (implementation plan).
+Project scaffold, all config (Vite/TS/Tailwind/Biome/PWA/components.json), theme in `index.css`, feature-slice folders with stub `index.ts`, Supabase client + `config.toml`, the initial migration (`20260706120000_init.sql`: enums, tables, RLS, RPCs, triggers), the offline-first persistence wiring, and a booting app shell (boards list placeholder + a board view rendering the four columns). Feature behaviour is the next milestone (implementation plan).

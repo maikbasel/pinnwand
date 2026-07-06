@@ -20,7 +20,7 @@
     "db:start": "supabase start",
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",
-    "db:migration:new": "node scripts/new-migration.mjs",
+    "db:migration:new": "supabase migration new",
     "db:types": "supabase gen types typescript --local > src/shared/types/database.ts",
     "prepare": "husky"
   },
