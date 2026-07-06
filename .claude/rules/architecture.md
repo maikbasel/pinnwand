@@ -1,0 +1,51 @@
+# Architecture: Vertical Feature Slices
+
+Always-loaded — layer boundaries are non-negotiable for this codebase.
+
+Code is organized by feature, not by technical layer. Each feature is a complete vertical slice with strict layer separation between UI, orchestration, and data access.
+
+## Feature slice structure
+
+```
+src/features/<feature>/
+├── index.ts          ← Public API of the feature (only exports consumed by app/ or other features)
+├── types.ts          ← Feature-local TypeScript types
+├── api/              ← Supabase calls only — no React imports
+│   └── <feature>.ts
+├── hooks/            ← TanStack Query hooks — orchestrates use cases
+│   └── use<Feature>.ts
+└── components/       ← React UI — no Supabase imports
+    └── <Component>.tsx
+```
+
+## Layer rules
+
+| Layer | May import | May NOT import |
+|---|---|---|
+| `components/` | `hooks/`, `types.ts`, other components, `shared/` | `api/`, `@supabase/*` directly |
+| `hooks/` | `api/`, `types.ts`, `@tanstack/react-query`, `shared/` | React DOM components |
+| `api/` | `shared/lib/supabase.ts`, `types.ts`, `database.ts`, `zod` | React, hooks, components |
+| `index.ts` | Re-exports the feature's public surface only | — |
+
+## Cross-cutting
+
+- `src/shared/lib/supabase.ts` is the **only** file that calls `createClient` — every `api/` module imports the singleton from there.
+- `src/shared/` holds primitives reused across features: UI components, hooks, lib utilities, generated `types/database.ts`.
+- `src/app/` is the router + entry shell. Zero business logic. Routes import from features' `index.ts`.
+
+## Dependency direction
+
+```
+src/app/  →  src/features/<x>/  →  src/shared/
+                  │
+                  ├── components/  →  hooks/  →  api/  →  shared/lib/supabase.ts
+                  │
+                  └── index.ts (public)
+```
+
+- Features never import each other's internal files. If feature A needs something from feature B, B must export it from its `index.ts` (or it belongs in `shared/`).
+- `app/` calls features through their public `index.ts` — never deep-imports a hook or component.
+
+## When two features need the same thing
+
+If you find yourself reimplementing the same picker, drawer, or hook in a second feature, **stop**. Move the shared piece to `src/shared/` (component) or extract to a small library (hook), and import from there in both features. Two divergent copies of the same UI is a bug.

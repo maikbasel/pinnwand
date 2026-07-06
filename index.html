@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <title>Pinnwand</title>
+    <!-- No-FOUC bootstrap: resolve next-themes' `theme` key against the OS
+         scheme and pre-apply the class + theme-color before first paint.
+         next-themes reconciles to the same class on mount, so no conflict. -->
+    <script>
+      "use strict";
+      (() => {
+        try {
+          const stored = localStorage.getItem("theme");
+          const prefersDark = window.matchMedia(
+            "(prefers-color-scheme: dark)"
+          ).matches;
+          const dark =
+            stored === "dark" ||
+            ((!stored || stored === "system") && prefersDark);
+          document.documentElement.classList.add(dark ? "dark" : "light");
+          const meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) {
+            meta.setAttribute("content", dark ? "#171717" : "#ffffff");
+          }
+        } catch {
+          // Pre-app bootstrap: a storage/matchMedia failure must not block
+          // first paint. Falls back to the light meta.
+        }
+      })();
+    </script>
+  </head>
+  <body class="antialiased">
+    <div id="root"></div>
+    <script type="module" src="/src/app/main.tsx"></script>
+  </body>
+</html>
