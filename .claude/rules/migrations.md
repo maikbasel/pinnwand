@@ -6,7 +6,7 @@ Safety-critical — loaded every session. Migrations are the one thing in this a
 
 - **Never edit a migration file once it has been applied to any environment.** Add a new migration that fixes the prior one.
 - **Never delete a migration file.** Even if it was reverted, keep the file and add a new migration that does the revert in SQL.
-- File naming follows the Supabase CLI convention: `supabase migration new <name>` — let the CLI assign the timestamp.
+- File naming uses **sequential, zero-padded counters** (no timestamps): `0001_init.sql`, `0002_<name>.sql`, … Run `pnpm db:migration:new <name>` (`scripts/new-migration.mjs`), which picks the next number. The Supabase CLI applies migrations in filename sort order and only needs a leading numeric version token, so the counter orders correctly.
 
 ## RLS-first
 
@@ -17,12 +17,11 @@ Safety-critical — loaded every session. Migrations are the one thing in this a
 - A migration that creates a table without RLS + policies is incomplete. Do not split this across files.
 - Every policy uses `auth.uid()` — directly or via a `board_members` join / the `is_board_member` helper — to scope access.
 
-## Apply order: `--include-all`
+## Apply order & sequential numbering
 
-- The migrate init container (`docker/Dockerfile` `migrate` target) and `pnpm db:push` both run `supabase db push … --include-all`. **Keep the flag on both** — they are documented as the same command.
-- Why: parallel PRs merge out of timestamp order against a single linear prod. A later-merged PR can carry migrations stamped *earlier* than one already deployed (e.g. a fix branch stamped `…175959` deploys first, then a feature branch stamped `…132251` merges after). Plain `db push` aborts on this with "Found local migration files to be inserted before the last migration on remote database," failing the deploy.
-- `--include-all` applies every pending migration in version (timestamp) order regardless of where it sorts against the remote history table. This is safe **only because** migrations here are append-only and forward-only (see above): each is self-contained and never assumes a later-stamped sibling is absent.
-- This does **not** relax append-only. Never renumber or rename a file to "fix" ordering — that is editing an applied migration. Let timestamps fall where the CLI puts them and let `--include-all` reconcile.
+- Migrations apply in filename sort order. Sequential counters (`0001_`, `0002_`, …) make that order explicit and readable, at the cost of **collision risk**: two branches both claiming `0002_` must be reconciled at merge — renumber the *unapplied* one to the next free counter before it lands anywhere. Renumbering a file that has never been applied is fine; renumbering an already-applied migration is the one thing you must never do (that is editing history).
+- Locally, `pnpm db:reset` re-applies every migration from an empty DB in order — the authoritative check that the sequence is self-consistent.
+- Append-only still holds: each migration is self-contained and forward-only, never assuming a later-numbered sibling is absent.
 
 ## Schema discipline
 
@@ -33,7 +32,7 @@ Safety-critical — loaded every session. Migrations are the one thing in this a
 
 ## Verification before merging a migration
 
-- [ ] Apply locally via `pnpm db:push` (`supabase db push --db-url $DATABASE_URL --include-all`) against a fresh dev DB.
-- [ ] Regenerate `src/shared/types/database.ts` via `supabase gen types typescript`.
+- [ ] Apply locally via `pnpm db:reset` against a fresh dev DB (re-runs every migration in order).
+- [ ] Regenerate `src/shared/types/database.ts` via `pnpm db:types`.
 - [ ] Sign in as user A, attempt to read user B's data through the new table — confirm RLS denies it.
 - [ ] Migration runs cleanly from an empty DB (every prior migration + this one) — not just from current state.

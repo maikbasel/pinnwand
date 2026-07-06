@@ -43,10 +43,14 @@ Passwordless — magic link + 6-digit OTP fallback. **Self-serve signup disabled
 
 `auth`, `boards`, `members`, `tasks`, `appearance`, `navigation`, `profile` — each a vertical slice (`components/`, `hooks/`, `api/`, `index.ts`). Layer boundaries per `.claude/rules/architecture.md`.
 
+## Offline-first (required)
+
+The board surface is offline-first, ported from Mahlzeit: the TanStack Query cache + paused task mutations persist to IndexedDB (`@tanstack/react-query-persist-client` over an `idb-keyval` async persister). A cold offline launch renders boards from the persisted cache; task writes pause offline and resume on reconnect. Persistence is an allowlist — board/task/member/profile reads and `tasks` mutations only; never the auth session or join/sharing calls. Per-user `buster` partitions the cache on shared devices; purged on sign-out. Wiring: `src/shared/lib/idb-persister.ts`, `query-client.ts`, `PersistQueryClientProvider` in `main.tsx`.
+
 ## Out of scope (v1)
 
-Notifications, offline durable mutations, Bring!-style exports, passkeys, comments/attachments, custom columns, labels, sub-tasks. These can be layered in later as Mahlzeit did.
+Notifications, Bring!-style exports, passkeys, comments/attachments, custom columns, labels, sub-tasks. These can be layered in later as Mahlzeit did.
 
 ## Skeleton delivered
 
-Project scaffold, all config (Vite/TS/Tailwind/Biome/PWA/components.json), theme in `index.css`, feature-slice folders with stub `index.ts`, Supabase client + `config.toml`, the initial migration (`20260706120000_init.sql`: enums, tables, RLS, RPCs, triggers), and a booting app shell (boards list placeholder + a board view rendering the four columns). Feature behaviour is the next milestone (implementation plan).
+Project scaffold, all config (Vite/TS/Tailwind/Biome/PWA/components.json), theme in `index.css`, feature-slice folders with stub `index.ts`, Supabase client + `config.toml`, the initial migration (`0001_init.sql` — sequential numbering, no timestamps: enums, tables, RLS, RPCs, triggers), the offline-first persistence wiring, and a booting app shell (boards list placeholder + a board view rendering the four columns). Feature behaviour is the next milestone (implementation plan).
