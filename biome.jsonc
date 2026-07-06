@@ -1,7 +1,29 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.4.14/schema.json",
-  "extends": ["ultracite"],
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "extends": [
+    "ultracite/biome/core",
+    "ultracite/biome/react",
+    "ultracite/biome/vitest"
+  ],
   "files": {
-    "includes": ["**", "!src/app/routeTree.gen.ts", "!src/shared/types/database.ts"]
+    "includes": [
+      "!**/dist",
+      "!**/node_modules",
+      "!**/dev-dist",
+      "!**/coverage",
+      "!src/app/routeTree.gen.ts",
+      "!src/shared/types/database.ts",
+      "!.claude"
+    ]
+  },
+  "linter": {
+    "rules": {
+      "style": {
+        "useConsistentTypeDefinitions": {
+          "level": "error",
+          "options": { "style": "type" }
+        }
+      }
+    }
   }
 }

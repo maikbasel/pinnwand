@@ -1,3 +1,4 @@
+// biome-ignore-all lint/style/useFilenamingConvention: TanStack Router file-based route param uses `$boardId` per https://tanstack.com/router/latest/docs/framework/react/routing/dynamic-route-segments
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { TASK_COLUMNS } from "@/features/tasks/columns";
