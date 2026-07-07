@@ -24,6 +24,8 @@ export const SHARE_CODE_HINT =
   "Mit diesem Code können andere der Pinnwand beitreten.";
 export const COPY_CODE_BUTTON = "Code kopieren";
 export const COPY_CODE_COPIED = "Kopiert";
+export const COPY_CODE_ERROR =
+  "Kopieren nicht möglich. Markiere den Code und kopiere ihn manuell.";
 export const ROTATE_CODE_BUTTON = "Code neu generieren";
 export const ROTATE_CODE_CONFIRM =
   "Neuen Code erzeugen? Der alte Code funktioniert danach nicht mehr.";

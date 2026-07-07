@@ -9,7 +9,9 @@ export function useCreateBoard() {
   return useMutation<Board, Error, { name: string }>({
     mutationFn: createBoard,
     networkMode: "always",
-    meta: { op: "createBoard" },
+    // The CreateBoardEntry surface renders its own inline error; suppress the
+    // global toast so a failed create is not reported twice.
+    meta: { op: "createBoard", suppressToast: true },
     onSuccess: () => {
       if (user) {
         queryClient.invalidateQueries({ queryKey: BOARD_KEYS.byUser(user.id) });

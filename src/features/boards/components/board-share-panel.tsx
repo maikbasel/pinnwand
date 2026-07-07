@@ -12,6 +12,7 @@ import {
   CANCEL_LABEL,
   COPY_CODE_BUTTON,
   COPY_CODE_COPIED,
+  COPY_CODE_ERROR,
   ROTATE_CODE_BUTTON,
   ROTATE_CODE_CONFIRM,
   SHARE_CODE_HINT,
@@ -23,11 +24,26 @@ const COPIED_FEEDBACK_MS = 2000;
 
 function RotateCodeControl({ boardId }: { boardId: string }) {
   const [confirming, setConfirming] = useState(false);
+  const cancelRef = useRef<HTMLButtonElement>(null);
   const regenerateJoinCode = useRegenerateJoinCode(boardId);
 
+  // Move focus onto the safe (cancel) action when the confirm appears, so a
+  // keyboard user does not accidentally rotate the code with a stray Enter.
+  useEffect(() => {
+    if (confirming) {
+      cancelRef.current?.focus();
+    }
+  }, [confirming]);
+
   async function confirmRotate(): Promise<void> {
-    await regenerateJoinCode.mutateAsync();
-    setConfirming(false);
+    try {
+      await regenerateJoinCode.mutateAsync();
+      setConfirming(false);
+    } catch {
+      // The global MutationCache toast surfaces the error; reset the control so
+      // the owner can try again.
+      setConfirming(false);
+    }
   }
 
   if (!confirming) {
@@ -58,6 +74,7 @@ function RotateCodeControl({ boardId }: { boardId: string }) {
           className="flex-1"
           disabled={regenerateJoinCode.isPending}
           onClick={() => setConfirming(false)}
+          ref={cancelRef}
           type="button"
           variant="ghost"
         >
@@ -75,17 +92,29 @@ type BoardSharePanelProps = {
 
 export function BoardSharePanel({ board, isOwner }: BoardSharePanelProps) {
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
   const copiedTimeoutRef = useRef<number | undefined>(undefined);
 
   useEffect(() => () => window.clearTimeout(copiedTimeoutRef.current), []);
 
   async function copyCode(): Promise<void> {
-    await navigator.clipboard.writeText(board.joinCode);
-    setCopied(true);
-    window.clearTimeout(copiedTimeoutRef.current);
-    copiedTimeoutRef.current = window.setTimeout(() => {
+    try {
+      if (!navigator.clipboard) {
+        throw new Error("clipboard unavailable");
+      }
+      await navigator.clipboard.writeText(board.joinCode);
+      setCopyFailed(false);
+      setCopied(true);
+      window.clearTimeout(copiedTimeoutRef.current);
+      copiedTimeoutRef.current = window.setTimeout(() => {
+        setCopied(false);
+      }, COPIED_FEEDBACK_MS);
+    } catch {
+      // Insecure context or a denied permission: the code is already shown on
+      // screen, so fall back to asking the user to copy it manually.
       setCopied(false);
-    }, COPIED_FEEDBACK_MS);
+      setCopyFailed(true);
+    }
   }
 
   return (
@@ -101,6 +130,11 @@ export function BoardSharePanel({ board, isOwner }: BoardSharePanelProps) {
         <Button onClick={copyCode} type="button" variant="outline">
           {copied ? COPY_CODE_COPIED : COPY_CODE_BUTTON}
         </Button>
+        {copyFailed ? (
+          <p className="text-destructive text-sm" role="alert">
+            {COPY_CODE_ERROR}
+          </p>
+        ) : null}
         {isOwner ? <RotateCodeControl boardId={board.id} /> : null}
       </CardContent>
     </Card>

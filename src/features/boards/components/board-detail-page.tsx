@@ -12,6 +12,7 @@ import { useRenameBoard } from "../hooks/use-rename-board";
 import {
   BACK_LABEL,
   BOARD_NOT_FOUND,
+  BOARDS_LOAD_ERROR,
   CANCEL_LABEL,
   DELETE_BOARD_BUTTON,
   DELETE_BOARD_CONFIRM,
@@ -46,13 +47,24 @@ function BoardHeading({ board, isOwner }: BoardHeadingProps) {
   }
 
   async function commit(): Promise<void> {
+    // The input stays mounted-but-disabled while pending, and disabling it
+    // fires onBlur -> commit again; bail so a single rename never double-fires.
+    if (renameBoard.isPending) {
+      return;
+    }
     const trimmed = name.trim();
     if (!trimmed || trimmed === board.name) {
       cancel();
       return;
     }
-    await renameBoard.mutateAsync({ name: trimmed });
-    setIsEditing(false);
+    try {
+      await renameBoard.mutateAsync({ name: trimmed });
+      setIsEditing(false);
+    } catch {
+      // The optimistic update rolled back and the global toast shows the error;
+      // close the editor so the reverted name is shown.
+      cancel();
+    }
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
@@ -101,11 +113,24 @@ function BoardHeading({ board, isOwner }: BoardHeadingProps) {
 
 function DeleteBoardControl({ boardId }: { boardId: string }) {
   const [confirming, setConfirming] = useState(false);
+  const cancelRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
   const deleteBoard = useDeleteBoard(boardId);
 
+  useEffect(() => {
+    if (confirming) {
+      cancelRef.current?.focus();
+    }
+  }, [confirming]);
+
   async function confirmDelete(): Promise<void> {
-    await deleteBoard.mutateAsync();
+    try {
+      await deleteBoard.mutateAsync();
+    } catch {
+      // The global toast surfaces the failure; reset so the owner can retry.
+      setConfirming(false);
+      return;
+    }
     await navigate({ to: "/" });
   }
 
@@ -139,6 +164,7 @@ function DeleteBoardControl({ boardId }: { boardId: string }) {
           className="flex-1"
           disabled={deleteBoard.isPending}
           onClick={() => setConfirming(false)}
+          ref={cancelRef}
           type="button"
           variant="ghost"
         >
@@ -151,11 +177,24 @@ function DeleteBoardControl({ boardId }: { boardId: string }) {
 
 function LeaveBoardControl({ boardId }: { boardId: string }) {
   const [confirming, setConfirming] = useState(false);
+  const cancelRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
   const leaveBoard = useLeaveBoard(boardId);
 
+  useEffect(() => {
+    if (confirming) {
+      cancelRef.current?.focus();
+    }
+  }, [confirming]);
+
   async function confirmLeave(): Promise<void> {
-    await leaveBoard.mutateAsync();
+    try {
+      await leaveBoard.mutateAsync();
+    } catch {
+      // The global toast surfaces the failure; reset so the user can retry.
+      setConfirming(false);
+      return;
+    }
     await navigate({ to: "/" });
   }
 
@@ -189,6 +228,7 @@ function LeaveBoardControl({ boardId }: { boardId: string }) {
           className="flex-1"
           disabled={leaveBoard.isPending}
           onClick={() => setConfirming(false)}
+          ref={cancelRef}
           type="button"
           variant="ghost"
         >
@@ -217,7 +257,7 @@ type BoardDetailPageProps = {
 };
 
 export function BoardDetailPage({ boardId }: BoardDetailPageProps) {
-  const { memberships, isPending } = useMyBoards();
+  const { memberships, isPending, isError } = useMyBoards();
   const membership = memberships.find((m) => m.board.id === boardId);
 
   if (isPending && !membership) {
@@ -225,6 +265,17 @@ export function BoardDetailPage({ boardId }: BoardDetailPageProps) {
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-4 py-6 sm:px-6">
         <Skeleton className="h-8 w-2/3" />
         <Skeleton className="h-40 w-full rounded-xl" />
+      </div>
+    );
+  }
+
+  if (isError && !membership) {
+    return (
+      <div className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-4 py-6 sm:px-6">
+        <BackLink />
+        <p className="text-destructive text-sm" role="alert">
+          {BOARDS_LOAD_ERROR}
+        </p>
       </div>
     );
   }
