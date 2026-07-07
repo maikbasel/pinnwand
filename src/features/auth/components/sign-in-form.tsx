@@ -1,11 +1,21 @@
 import { useNavigate } from "@tanstack/react-router";
 import { REGEXP_ONLY_DIGITS } from "input-otp";
 import { type FormEvent, useEffect, useState } from "react";
+import { Button } from "@/shared/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/shared/components/ui/card";
+import { Input } from "@/shared/components/ui/input";
 import {
   InputOTP,
   InputOTPGroup,
   InputOTPSlot,
 } from "@/shared/components/ui/input-otp";
+import { Label } from "@/shared/components/ui/label";
 import { useSignIn } from "../hooks/use-sign-in";
 import { useVerifyOtp } from "../hooks/use-verify-otp";
 import {
@@ -148,99 +158,100 @@ export function SignInForm({ redirect }: { redirect: string }) {
 
   if (step === "otp") {
     return (
-      <div className="flex w-full max-w-sm flex-col gap-4">
-        <div className="text-center">
-          <h1 className="font-semibold text-2xl tracking-tight">
+      <Card className="w-full max-w-sm">
+        <CardHeader className="text-center">
+          <CardTitle className="text-2xl tracking-tight">
             {OTP_HEADING}
-          </h1>
-          <p className="mt-2 text-muted-foreground text-sm">
-            {OTP_SENT_NEUTRAL}
-          </p>
-        </div>
-        <div className="flex justify-center">
-          <InputOTP
-            aria-label={OTP_HEADING}
-            disabled={verify.isPending}
-            maxLength={OTP_LENGTH}
-            onChange={onCodeChange}
-            pattern={REGEXP_ONLY_DIGITS}
-            value={code}
-          >
-            <InputOTPGroup>
-              {OTP_SLOT_POSITIONS.map((position) => (
-                <InputOTPSlot index={position} key={position} />
-              ))}
-            </InputOTPGroup>
-          </InputOTP>
-        </div>
-        {otpError ? (
-          <p className="text-center text-destructive text-sm" role="alert">
-            {otpError}
-          </p>
-        ) : null}
-        <button
-          className="text-muted-foreground text-sm underline-offset-4 hover:underline disabled:opacity-60"
-          disabled={resendDisabled}
-          onClick={() => send()}
-          type="button"
-        >
-          {remainingSeconds > 0
-            ? resendCountdownLabel(remainingSeconds)
-            : CTA_RESEND}
-        </button>
-        <button
-          className="text-muted-foreground text-sm underline-offset-4 hover:underline"
-          onClick={() => {
-            setStep("email");
-            setCode("");
-            setOtpError(null);
-          }}
-          type="button"
-        >
-          {CTA_USE_OTHER_EMAIL}
-        </button>
-        <span aria-hidden className="sr-only">
-          {verify.isPending ? CTA_VERIFYING : CTA_VERIFY}
-        </span>
-      </div>
+          </CardTitle>
+          <CardDescription>{OTP_SENT_NEUTRAL}</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex justify-center">
+            <InputOTP
+              aria-label={OTP_HEADING}
+              disabled={verify.isPending}
+              maxLength={OTP_LENGTH}
+              onChange={onCodeChange}
+              pattern={REGEXP_ONLY_DIGITS}
+              value={code}
+            >
+              <InputOTPGroup>
+                {OTP_SLOT_POSITIONS.map((position) => (
+                  <InputOTPSlot index={position} key={position} />
+                ))}
+              </InputOTPGroup>
+            </InputOTP>
+          </div>
+          {otpError ? (
+            <p className="text-center text-destructive text-sm" role="alert">
+              {otpError}
+            </p>
+          ) : null}
+          <div className="flex flex-col gap-1">
+            <Button
+              disabled={resendDisabled}
+              onClick={() => send()}
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              {remainingSeconds > 0
+                ? resendCountdownLabel(remainingSeconds)
+                : CTA_RESEND}
+            </Button>
+            <Button
+              onClick={() => {
+                setStep("email");
+                setCode("");
+                setOtpError(null);
+              }}
+              size="sm"
+              type="button"
+              variant="link"
+            >
+              {CTA_USE_OTHER_EMAIL}
+            </Button>
+          </div>
+          <span aria-hidden className="sr-only">
+            {verify.isPending ? CTA_VERIFYING : CTA_VERIFY}
+          </span>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <div className="flex w-full max-w-sm flex-col gap-4">
-      <div className="text-center">
-        <h1 className="font-semibold text-2xl tracking-tight">
+    <Card className="w-full max-w-sm">
+      <CardHeader className="text-center">
+        <CardTitle className="text-2xl tracking-tight">
           {SIGN_IN_HEADING}
-        </h1>
-        <p className="mt-1 text-muted-foreground text-sm">{SIGN_IN_SUBHEAD}</p>
-      </div>
-      <form className="flex flex-col gap-3" onSubmit={onEmailSubmit}>
-        <label className="flex flex-col gap-1 text-sm" htmlFor="email">
-          <span className="text-muted-foreground">{EMAIL_LABEL}</span>
-          <input
-            autoComplete="email"
-            className="rounded-md border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            id="email"
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder={EMAIL_PLACEHOLDER}
-            required
-            type="email"
-            value={email}
-          />
-        </label>
-        {emailError ? (
-          <p className="text-destructive text-sm" role="alert">
-            {emailError}
-          </p>
-        ) : null}
-        <button
-          className="rounded-md bg-primary px-4 py-2 font-medium text-primary-foreground text-sm disabled:opacity-60"
-          disabled={signIn.isPending}
-          type="submit"
-        >
-          {signIn.isPending ? CTA_SENDING : CTA_SEND_CODE}
-        </button>
-      </form>
-    </div>
+        </CardTitle>
+        <CardDescription>{SIGN_IN_SUBHEAD}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form className="flex flex-col gap-4" onSubmit={onEmailSubmit}>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="email">{EMAIL_LABEL}</Label>
+            <Input
+              autoComplete="email"
+              id="email"
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder={EMAIL_PLACEHOLDER}
+              required
+              type="email"
+              value={email}
+            />
+          </div>
+          {emailError ? (
+            <p className="text-destructive text-sm" role="alert">
+              {emailError}
+            </p>
+          ) : null}
+          <Button className="w-full" disabled={signIn.isPending} type="submit">
+            {signIn.isPending ? CTA_SENDING : CTA_SEND_CODE}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
   );
 }
