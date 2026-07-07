@@ -50,6 +50,12 @@ export default defineConfig({
     setupFiles: ["./src/test/setup.ts"],
     css: true,
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
-    exclude: ["**/node_modules/**", "**/dist/**"],
+    // Integration tests live under src/**/*.integration.test.ts and need a
+    // Postgres testcontainer; they have their own vitest.integration.config.ts.
+    exclude: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "src/**/*.integration.test.ts",
+    ],
   },
 });

@@ -1,0 +1,37 @@
+# Build context excludes. The web/migrate/seed images install deps via pnpm
+# (`COPY --from=deps` + a BuildKit cache mount) and only need source + config,
+# so everything here is dead weight in the context, or, for .env, actively
+# harmful (COPY . . in the build stage would bake it into an image layer).
+#
+# NOTE: .dockerignore does not support trailing inline comments; a pattern and
+# a comment must never share a line, or the comment becomes part of the pattern
+# and silently stops matching.
+
+# Rebuilt in the deps stage; a host copy would clobber it.
+.git
+.claude
+node_modules
+**/node_modules
+.pnpm-store
+dist
+dev-dist
+
+# Test / report artifacts
+test-results
+playwright-report
+playwright/.cache
+coverage
+
+# Secrets: keep them out of the build-stage layer
+.env
+.env.*
+!.env.example
+
+# Editor / tooling / docs not read by the build
+.idea
+.vscode
+docs
+
+# Incremental build caches (stale copies confuse a clean tsc -b)
+*.tsbuildinfo
+*.log

@@ -1,0 +1,229 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+    paths-ignore: &doc-paths
+      - "**/*.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".gitignore"
+      - ".editorconfig"
+      - ".vscode/**"
+  pull_request:
+    branches: [master]
+    paths-ignore: *doc-paths
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+  PNPM_VERSION: "10.18.0"
+
+jobs:
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+
+  check-types:
+    name: Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check-types
+
+  unit-test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+
+  integration-test:
+    name: Integration Tests (testcontainers + supabase/postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # ubuntu-latest runners have Docker preinstalled. Pre-pull the image so
+      # the test timer isn't dominated by the ~150MB image fetch on cold-cache
+      # runs; the integration setup reuses the cached layer.
+      - name: Pre-pull supabase/postgres image
+        run: docker pull supabase/postgres:15.14.1.121
+      - run: pnpm test:integration
+
+  dead-code:
+    name: Dead Code & Unused Deps
+    runs-on: ubuntu-latest
+    if: github.actor != 'renovate[bot]'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm knip
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+  security:
+    name: Security & Dependency Audit
+    runs-on: ubuntu-latest
+    if: github.actor != 'renovate[bot]'
+    steps:
+      - uses: actions/checkout@v6
+      - name: Semgrep SAST
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: >-
+            p/typescript
+            p/react
+            p/owasp-top-ten
+            p/secrets
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Dependency audit
+        run: pnpm audit --audit-level=high
+      - name: Lockfile dedupe check
+        run: pnpm dedupe --check
+
+  e2e:
+    name: Playwright (containers)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Expose GitHub Actions runtime to BuildKit
+        uses: crazy-max/ghaction-github-runtime@v3
+
+      - name: Build & start infrastructure
+        env:
+          COMPOSE_BAKE: "true"
+        run: pnpm e2e:up
+
+      # PR/push gate runs chromium only. The nightly full cross-browser matrix
+      # (chromium + mobile-chromium + mobile-webkit) lives in e2e.yml.
+      - name: Run Playwright (chromium)
+        env:
+          PLAYWRIGHT_ARGS: "--project=chromium"
+        run: pnpm e2e:test
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: pnpm e2e:logs
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 1
+
+      - name: Upload Playwright traces & artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-test-results
+          path: test-results/
+          retention-days: 1
+
+  ci-pass:
+    name: CI Pass
+    needs:
+      [
+        lint,
+        check-types,
+        unit-test,
+        integration-test,
+        dead-code,
+        build,
+        security,
+        e2e,
+      ]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Decide overall result
+        uses: re-actors/alls-green@release/v1
+        with:
+          jobs: ${{ toJSON(needs) }}
+          allowed-skips: dead-code, security

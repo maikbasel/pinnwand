@@ -1,0 +1,286 @@
+# Local development. The frontend runs on the host via `pnpm dev` and points
+# VITE_SUPABASE_URL at http://localhost:8000 (kong). All Supabase services
+# live in this compose. Use:
+#
+#   pnpm dev:up         (boots the stack + seeds demo users)
+#   pnpm dev            (starts vite on :5173)
+#   pnpm dev:down       (stops, keeps the db volume)
+#   pnpm dev:reset      (stops + wipes the db volume)
+#
+# Ports are ${VAR:-default} interpolations, so plain `docker compose up` (no
+# env file) yields the canonical ports (kong 8000, db 5432, studio 8001).
+#
+# The JWTs below are the documented Supabase self-host demo keys, safe to
+# commit ONLY because they're public defaults. Prod uses ${VAR}-injected
+# values via docker-compose.coolify.yml.
+
+x-jwt: &jwt
+  JWT_SECRET: your-super-secret-jwt-token-with-at-least-32-characters-long
+  ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.b_lMH2mc5km7S9Lw_sRGGqE9IeiahYu-caevDcacKiY
+  SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.kcyKZAiwnnBG9t6IVGO17bcVw574pVynTHYVdF4q-p0
+
+services:
+  db:
+    image: supabase/postgres:15.14.1.121
+    restart: unless-stopped
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_HOST: /var/run/postgresql
+      POSTGRES_PORT: 5432
+      JWT_EXP: "3600"
+      <<: *jwt
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-scripts/00-bootstrap-supabase-admin.sql:/docker-entrypoint-initdb.d/00-bootstrap-supabase-admin.sql:ro
+      - ./docker/init-scripts/roles.sql:/docker-entrypoint-initdb.d/init-scripts/99-roles.sql:ro
+      - ./docker/init-scripts/webhooks.sql:/docker-entrypoint-initdb.d/init-scripts/98-webhooks.sql:ro
+      - ./docker/init-scripts/jwt.sql:/docker-entrypoint-initdb.d/jwt.sql:ro
+      - ./docker/init-scripts/migrations/_supabase.sql:/docker-entrypoint-initdb.d/migrations/97-_supabase.sql:ro
+      - ./docker/init-scripts/migrations/realtime.sql:/docker-entrypoint-initdb.d/migrations/99-realtime.sql:ro
+      - ./docker/init-scripts/migrations/logs.sql:/docker-entrypoint-initdb.d/migrations/99-logs.sql:ro
+      - ./docker/init-scripts/migrations/pooler.sql:/docker-entrypoint-initdb.d/migrations/99-pooler.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 60s
+
+  migrate:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: migrate
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/postgres
+      PGSSLMODE: disable
+    volumes:
+      - ./supabase:/app/supabase
+    restart: "no"
+
+  auth:
+    image: supabase/gotrue:v2.189.0
+    restart: unless-stopped
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    environment:
+      API_EXTERNAL_URL: http://localhost:${KONG_PORT:-8000}
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: "9999"
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:postgres@db:5432/postgres
+      GOTRUE_SITE_URL: http://localhost:${VITE_PORT:-5173}
+      GOTRUE_URI_ALLOW_LIST: http://localhost:${VITE_PORT:-5173},http://127.0.0.1:${VITE_PORT:-5173}
+      GOTRUE_DISABLE_SIGNUP: "true"
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: "3600"
+      <<: *jwt
+      GOTRUE_JWT_SECRET: your-super-secret-jwt-token-with-at-least-32-characters-long
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_MAILER_AUTOCONFIRM: "false"
+      GOTRUE_MAILER_SECURE_EMAIL_CHANGE_ENABLED: "true"
+      GOTRUE_SMTP_HOST: mailpit
+      GOTRUE_SMTP_PORT: "1025"
+      GOTRUE_SMTP_USER: ""
+      GOTRUE_SMTP_PASS: ""
+      GOTRUE_SMTP_SENDER_NAME: Pinnwand
+      GOTRUE_SMTP_ADMIN_EMAIL: no-reply@pinnwand.local
+      GOTRUE_MAILER_URLPATHS_INVITE: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /auth/v1/verify
+      # Dev only: relax the email-send limits so rapid local sign-in iteration
+      # is not gated. GoTrue's defaults impose a per-email cooldown (the
+      # "you can only request this after N seconds" 429). Prod keeps real limits
+      # in docker-compose.coolify.yml (GOTRUE_SMTP_MAX_FREQUENCY 60s, etc.).
+      GOTRUE_SMTP_MAX_FREQUENCY: 1s
+      GOTRUE_RATE_LIMIT_EMAIL_SENT: "1000000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9999/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  rest:
+    image: postgrest/postgrest:v12.2.12
+    restart: unless-stopped
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    environment:
+      PGRST_DB_URI: postgres://authenticator:postgres@db:5432/postgres
+      PGRST_DB_SCHEMAS: public,graphql_public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: your-super-secret-jwt-token-with-at-least-32-characters-long
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      PGRST_APP_SETTINGS_JWT_SECRET: your-super-secret-jwt-token-with-at-least-32-characters-long
+      PGRST_APP_SETTINGS_JWT_EXP: "3600"
+    command: postgrest
+
+  realtime:
+    # The dot-name matches the seeded tenant external_id (`realtime-dev`) and
+    # also serves as kong's upstream hostname for /realtime/v1/*; see
+    # docker/kong.yml for the full rationale. Using `hostname:` instead of
+    # `container_name:` adds the dot-name as a network alias while letting
+    # Docker pick a project-scoped container name, so dev + e2e stacks can
+    # run side-by-side without colliding on the global container_name slot.
+    hostname: realtime-dev.supabase-realtime
+    image: supabase/realtime:v2.93.2
+    restart: unless-stopped
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    environment:
+      PORT: "4000"
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: supabase_admin
+      DB_PASSWORD: postgres
+      DB_NAME: postgres
+      DB_AFTER_CONNECT_QUERY: "SET search_path TO _realtime"
+      DB_ENC_KEY: supabaserealtime
+      API_JWT_SECRET: your-super-secret-jwt-token-with-at-least-32-characters-long
+      METRICS_JWT_SECRET: your-super-secret-jwt-token-with-at-least-32-characters-long
+      SECRET_KEY_BASE: UpNVntn3cDxHJpq99YMc1T1AQgQpc8kfYTuRgBiYa15BLrx8etQoXz3gZv1/u2oq
+      ERL_AFLAGS: -proto_dist inet_tcp
+      DNS_NODES: "''"
+      RLIMIT_NOFILE: "10000"
+      APP_NAME: realtime
+      SEED_SELF_HOST: "true"
+      RUN_JANITOR: "true"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:4000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  meta:
+    image: supabase/postgres-meta:v0.96.5
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      PG_META_PORT: "8080"
+      PG_META_DB_HOST: db
+      PG_META_DB_PORT: "5432"
+      PG_META_DB_NAME: postgres
+      PG_META_DB_USER: supabase_admin
+      PG_META_DB_PASSWORD: postgres
+
+  studio:
+    image: supabase/studio:2026.05.04-sha-e540f90
+    restart: unless-stopped
+    depends_on:
+      meta: { condition: service_started }
+    ports:
+      - "${STUDIO_PORT:-8001}:3000"
+    environment:
+      STUDIO_PG_META_URL: http://meta:8080
+      POSTGRES_PASSWORD: postgres
+      DEFAULT_ORGANIZATION_NAME: pinnwand
+      DEFAULT_PROJECT_NAME: pinnwand
+      SUPABASE_URL: http://kong:8000
+      SUPABASE_PUBLIC_URL: http://localhost:${KONG_PORT:-8000}
+      <<: *jwt
+      SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.b_lMH2mc5km7S9Lw_sRGGqE9IeiahYu-caevDcacKiY
+      SUPABASE_SERVICE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.kcyKZAiwnnBG9t6IVGO17bcVw574pVynTHYVdF4q-p0
+      LOGFLARE_API_KEY: not-used
+      LOGFLARE_URL: http://localhost
+      NEXT_PUBLIC_ENABLE_LOGS: "false"
+      # Studio's `server.js` reads `HOSTNAME` for the bind address. Without
+      # this, Next.js 16 in this image binds only to the container's network
+      # IP and `localhost:3000` healthchecks fail. Matches upstream
+      # supabase/supabase commit f2d1c7ae (Apr 2026).
+      HOSTNAME: "0.0.0.0"
+      # Studio 2026.04.27+ asserts these at module load and the request
+      # handlers in that same Next.js bundle (Auth → Add user / magic link)
+      # `scandir` the paths at runtime. The image ships without these
+      # directories, so without the tmpfs mounts below every hit on that bundle
+      # 500s with `ENOENT: no such file or directory, scandir '/app/edge-functions'`.
+      # Self-hosted Studio writes nothing meaningful here, so tmpfs (empty,
+      # in-memory) is sufficient and matches upstream paths.
+      SNIPPETS_MANAGEMENT_FOLDER: /app/snippets
+      EDGE_FUNCTIONS_MANAGEMENT_FOLDER: /app/edge-functions
+    tmpfs:
+      - /app/snippets
+      - /app/edge-functions
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "node -e \"fetch('http://localhost:3000/api/platform/profile').then((r) => {if (r.status !== 200) throw new Error(r.status)})\""
+      interval: 5s
+      timeout: 10s
+      retries: 3
+
+  kong:
+    image: kong:2.8.1
+    restart: unless-stopped
+    depends_on:
+      auth: { condition: service_started }
+      rest: { condition: service_started }
+      realtime: { condition: service_started }
+    ports:
+      - "${KONG_PORT:-8000}:8000/tcp"
+      - "${KONG_TLS_PORT:-8443}:8443/tcp"
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /home/kong/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_PLUGINS: request-transformer,cors,key-auth,acl,basic-auth
+      KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
+      KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
+      SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.b_lMH2mc5km7S9Lw_sRGGqE9IeiahYu-caevDcacKiY
+      SUPABASE_SERVICE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.kcyKZAiwnnBG9t6IVGO17bcVw574pVynTHYVdF4q-p0
+    volumes:
+      - ./docker/kong.yml:/home/kong/temp.yml:ro
+    entrypoint:
+      - bash
+      - -c
+      - 'sed -e "s|\$$SUPABASE_ANON_KEY|$$SUPABASE_ANON_KEY|g" -e "s|\$$SUPABASE_SERVICE_KEY|$$SUPABASE_SERVICE_KEY|g" /home/kong/temp.yml > /home/kong/kong.yml && /docker-entrypoint.sh kong docker-start'
+
+  mailpit:
+    image: axllent/mailpit:v1.29.7
+    restart: unless-stopped
+    ports:
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8025/readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Dev-only fixture seeding. Provisions demo users + a shared board via the
+  # real code paths (create_board / join_board_by_code), then exits. Sign in by
+  # magic link / OTP via Mailpit. Absent from docker-compose.coolify.yml, so it
+  # can never run against prod; the seed logic lives in scripts/, never
+  # supabase/migrations/, so `db push --include-all` can't apply it. Idempotent:
+  # re-running against an already-seeded volume is a no-op.
+  seed:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: seed
+    depends_on:
+      kong: { condition: service_started }
+      auth: { condition: service_healthy }
+      rest: { condition: service_started }
+    environment:
+      <<: *jwt
+      SEED_DEV: "true"
+      SUPABASE_URL: http://kong:8000
+      VITE_PORT: ${VITE_PORT:-5173}
+      MAILPIT_UI_PORT: ${MAILPIT_UI_PORT:-8025}
+    restart: "no"
+
+volumes:
+  postgres_data:

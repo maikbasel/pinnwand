@@ -1,0 +1,256 @@
+# CI integration test stack. Sealed network, no host port mappings.
+# Drives:
+#   pnpm e2e:up    → builds + starts everything except `playwright`
+#   pnpm e2e:test  → runs `playwright` against the running stack
+#   pnpm e2e:logs  → dumps logs on failure
+#   pnpm e2e:down  → tears down with volumes
+#
+# All cache hooks (cache_from / cache_to) target type=gha,scope=web-e2e:
+# a CI workflow can expose the GH Actions cache to BuildKit so layers persist
+# across PR runs.
+
+# Pinned Compose project name so this sealed stack is ALWAYS isolated from the
+# dev stack (docker-compose.yml). Compose otherwise derives the project name
+# from the working-directory basename, so both stacks would resolve to the SAME
+# name (sharing container names, the default network, and volumes), and an
+# `e2e:down -v` would tear down the running dev backend. A fixed name (the dev
+# stack keeps its directory-derived one) guarantees e2e up/down never touches
+# dev.
+name: pinnwand-e2e
+
+x-jwt: &jwt
+  JWT_SECRET: your-super-secret-jwt-token-with-at-least-32-characters-long
+  ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.b_lMH2mc5km7S9Lw_sRGGqE9IeiahYu-caevDcacKiY
+  SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.kcyKZAiwnnBG9t6IVGO17bcVw574pVynTHYVdF4q-p0
+
+x-build-cache: &build-cache
+  cache_from:
+    - type=gha,scope=web-e2e
+  cache_to:
+    - type=gha,mode=max,scope=web-e2e
+
+services:
+  db:
+    image: supabase/postgres:15.14.1.121
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+      JWT_EXP: "3600"
+      <<: *jwt
+    volumes:
+      - ./docker/init-scripts/00-bootstrap-supabase-admin.sql:/docker-entrypoint-initdb.d/00-bootstrap-supabase-admin.sql:ro
+      - ./docker/init-scripts/roles.sql:/docker-entrypoint-initdb.d/init-scripts/99-roles.sql:ro
+      - ./docker/init-scripts/webhooks.sql:/docker-entrypoint-initdb.d/init-scripts/98-webhooks.sql:ro
+      - ./docker/init-scripts/jwt.sql:/docker-entrypoint-initdb.d/jwt.sql:ro
+      - ./docker/init-scripts/migrations/_supabase.sql:/docker-entrypoint-initdb.d/migrations/97-_supabase.sql:ro
+      - ./docker/init-scripts/migrations/realtime.sql:/docker-entrypoint-initdb.d/migrations/99-realtime.sql:ro
+      - ./docker/init-scripts/migrations/logs.sql:/docker-entrypoint-initdb.d/migrations/99-logs.sql:ro
+      - ./docker/init-scripts/migrations/pooler.sql:/docker-entrypoint-initdb.d/migrations/99-pooler.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U postgres -d postgres"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+      start_period: 60s
+
+  migrate:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: migrate
+      <<: *build-cache
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/postgres
+      PGSSLMODE: disable
+    restart: "no"
+
+  auth:
+    image: supabase/gotrue:v2.189.0
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    environment:
+      API_EXTERNAL_URL: http://kong:8000
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: "9999"
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:postgres@db:5432/postgres
+      # Matches the playwright service's view of the app (http://localhost:8080
+      # via the shared web network namespace, see below). Driving the browser
+      # at a different origin from the redirect_to drops the PKCE verifier
+      # stored in localStorage on sign-in.
+      GOTRUE_SITE_URL: http://localhost:8080
+      GOTRUE_URI_ALLOW_LIST: http://localhost:8080
+      # Self-serve signup stays OFF in e2e (Pinnwand invariant), so the
+      # anti-enumeration sign-in specs see the real 422 for unknown emails.
+      # The direct-auth helper provisions users via the admin API, which
+      # bypasses this gate.
+      GOTRUE_DISABLE_SIGNUP: "true"
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: "3600"
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_SECRET: your-super-secret-jwt-token-with-at-least-32-characters-long
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_MAILER_AUTOCONFIRM: "false"
+      # Mirror dev/prod: secure email change requires confirming BOTH the old
+      # and the new address.
+      GOTRUE_MAILER_SECURE_EMAIL_CHANGE_ENABLED: "true"
+      GOTRUE_SMTP_HOST: mailpit
+      GOTRUE_SMTP_PORT: "1025"
+      GOTRUE_SMTP_USER: ""
+      GOTRUE_SMTP_PASS: ""
+      GOTRUE_SMTP_SENDER_NAME: Pinnwand
+      GOTRUE_SMTP_ADMIN_EMAIL: no-reply@pinnwand.test
+      GOTRUE_MAILER_URLPATHS_INVITE: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /auth/v1/verify
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9999/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  rest:
+    image: postgrest/postgrest:v12.2.12
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    environment:
+      PGRST_DB_URI: postgres://authenticator:postgres@db:5432/postgres
+      PGRST_DB_SCHEMAS: public,graphql_public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: your-super-secret-jwt-token-with-at-least-32-characters-long
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+
+  realtime:
+    # The dot-name matches the seeded tenant external_id (`realtime-dev`) and
+    # also serves as kong's upstream hostname for /realtime/v1/*; see
+    # docker/kong.yml for the full rationale.
+    hostname: realtime-dev.supabase-realtime
+    image: supabase/realtime:v2.93.2
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    environment:
+      PORT: "4000"
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: supabase_admin
+      DB_PASSWORD: postgres
+      DB_NAME: postgres
+      DB_AFTER_CONNECT_QUERY: "SET search_path TO _realtime"
+      DB_ENC_KEY: supabaserealtime
+      API_JWT_SECRET: your-super-secret-jwt-token-with-at-least-32-characters-long
+      METRICS_JWT_SECRET: your-super-secret-jwt-token-with-at-least-32-characters-long
+      SECRET_KEY_BASE: UpNVntn3cDxHJpq99YMc1T1AQgQpc8kfYTuRgBiYa15BLrx8etQoXz3gZv1/u2oq
+      ERL_AFLAGS: -proto_dist inet_tcp
+      DNS_NODES: "''"
+      RLIMIT_NOFILE: "10000"
+      APP_NAME: realtime
+      SEED_SELF_HOST: "true"
+      RUN_JANITOR: "true"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:4000/"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  kong:
+    image: kong:2.8.1
+    depends_on:
+      auth: { condition: service_started }
+      rest: { condition: service_started }
+      realtime: { condition: service_started }
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /home/kong/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_PLUGINS: request-transformer,cors,key-auth,acl,basic-auth
+      KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
+      KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
+      SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.b_lMH2mc5km7S9Lw_sRGGqE9IeiahYu-caevDcacKiY
+      SUPABASE_SERVICE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.kcyKZAiwnnBG9t6IVGO17bcVw574pVynTHYVdF4q-p0
+    volumes:
+      - ./docker/kong.yml:/home/kong/temp.yml:ro
+    entrypoint:
+      - bash
+      - -c
+      - 'sed -e "s|\$$SUPABASE_ANON_KEY|$$SUPABASE_ANON_KEY|g" -e "s|\$$SUPABASE_SERVICE_KEY|$$SUPABASE_SERVICE_KEY|g" /home/kong/temp.yml > /home/kong/kong.yml && /docker-entrypoint.sh kong docker-start'
+
+  mailpit:
+    image: axllent/mailpit:v1.29.7
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8025/readyz"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: runtime
+      <<: *build-cache
+      args:
+        VITE_SUPABASE_URL: http://kong:8000
+        VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.b_lMH2mc5km7S9Lw_sRGGqE9IeiahYu-caevDcacKiY
+    depends_on:
+      kong: { condition: service_started }
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  playwright:
+    image: mcr.microsoft.com/playwright:v1.59.1-noble
+    init: true
+    ipc: host
+    depends_on:
+      web: { condition: service_healthy }
+      mailpit: { condition: service_healthy }
+    # Share the web container's network namespace so the browser can reach the
+    # app over http://localhost:8080. GoTrue rejects any RP origin that is not
+    # HTTPS unless its hostname is `localhost` or `127.0.0.1`; reaching the app
+    # via Docker DNS (http://web:8080) would otherwise break the same-origin
+    # PKCE assumption. Service DNS for kong / mailpit still resolves through the
+    # shared Docker network.
+    network_mode: "service:web"
+    working_dir: /work
+    environment:
+      CI: "true"
+      # Skip husky's git-hook install during `pnpm install`; the Playwright
+      # image has no usable git setup here, so the prepare step bails.
+      HUSKY: "0"
+      PLAYWRIGHT_BASE_URL: http://localhost:8080
+      MAILPIT_URL: http://mailpit:8025
+      # Service-role key is fenced to this container only, never used by `web`
+      # or any other service. The direct-auth helper uses it for admin.*
+      # methods. Anon key is also passed for the in-Node verifyOtp call.
+      SUPABASE_URL: http://kong:8000
+      SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.kcyKZAiwnnBG9t6IVGO17bcVw574pVynTHYVdF4q-p0
+      SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.b_lMH2mc5km7S9Lw_sRGGqE9IeiahYu-caevDcacKiY
+      PLAYWRIGHT_ARGS: ${PLAYWRIGHT_ARGS:-}
+    volumes:
+      - ./:/work:cached
+      - playwright_node_modules:/work/node_modules
+      - ./playwright-report:/work/playwright-report
+      - ./test-results:/work/test-results
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        corepack enable
+        corepack prepare pnpm@10.18.0 --activate
+        pnpm install --frozen-lockfile
+        pnpm exec playwright test $${PLAYWRIGHT_ARGS}
+
+volumes:
+  playwright_node_modules:

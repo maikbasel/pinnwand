@@ -1,0 +1,46 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/app/routes/**/*.{ts,tsx}",
+    "src/features/*/index.ts",
+    "src/shared/components/ui/**/*.tsx",
+    "e2e/**/*.spec.ts"
+  ],
+  "project": ["src/**/*.{ts,tsx}", "e2e/**/*.{ts,tsx}"],
+  "ignore": ["e2e/helpers/**", "src/shared/lib/utils.ts"],
+  "ignoreDependencies": [
+    "@biomejs/biome",
+    "tailwindcss",
+    "@fontsource-variable/inter",
+    "tw-animate-css",
+    "shadcn",
+    "@testing-library/user-event",
+    "@testing-library/react",
+    "@base-ui/react",
+    "@dnd-kit/core",
+    "@dnd-kit/sortable",
+    "@dnd-kit/utilities",
+    "class-variance-authority",
+    "clsx",
+    "tailwind-merge",
+    "date-fns",
+    "input-otp",
+    "react-day-picker",
+    "react-swipeable",
+    "use-long-press",
+    "vaul"
+  ],
+  "ignoreExportsUsedInFile": true,
+  "vite": { "config": "vite.config.ts" },
+  "playwright": {
+    "config": "playwright.config.ts",
+    "entry": "e2e/**/*.spec.ts"
+  },
+  "vitest": {
+    "config": ["vite.config.ts", "vitest.integration.config.ts"]
+  },
+  "rules": {
+    "exports": "off",
+    "types": "off"
+  }
+}
