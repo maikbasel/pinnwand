@@ -7,7 +7,6 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle,
 } from "@/shared/components/ui/card";
 import { Input } from "@/shared/components/ui/input";
 import {
@@ -160,9 +159,9 @@ export function SignInForm({ redirect }: { redirect: string }) {
     return (
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl tracking-tight">
+          <h1 className="font-semibold text-2xl tracking-tight">
             {OTP_HEADING}
-          </CardTitle>
+          </h1>
           <CardDescription>{OTP_SENT_NEUTRAL}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -223,9 +222,9 @@ export function SignInForm({ redirect }: { redirect: string }) {
   return (
     <Card className="w-full max-w-sm">
       <CardHeader className="text-center">
-        <CardTitle className="text-2xl tracking-tight">
+        <h1 className="font-semibold text-2xl tracking-tight">
           {SIGN_IN_HEADING}
-        </CardTitle>
+        </h1>
         <CardDescription>{SIGN_IN_SUBHEAD}</CardDescription>
       </CardHeader>
       <CardContent>
