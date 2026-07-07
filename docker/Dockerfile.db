@@ -1,0 +1,20 @@
+# Bakes the Supabase init SQL into the postgres image so production deploys
+# don't rely on host bind-mounts. Coolify runs `docker compose` inside a
+# helper container; the docker daemon on the host doesn't see the helper's
+# `/artifacts/<uuid>/` paths, so relative bind-mount sources resolve to
+# nothing and Docker silently mounts empty directories in their place — which
+# breaks psql when it tries to read an init script (the file is a dir).
+#
+# Dev (`docker-compose.yml`) and e2e (`docker-compose.e2e.yml`) keep using
+# bind-mounts because there the daemon and the project dir share a filesystem.
+
+FROM supabase/postgres:15.14.1.121
+
+COPY docker/init-scripts/00-bootstrap-supabase-admin.sql /docker-entrypoint-initdb.d/00-bootstrap-supabase-admin.sql
+COPY docker/init-scripts/jwt.sql                          /docker-entrypoint-initdb.d/jwt.sql
+COPY docker/init-scripts/roles.sql                        /docker-entrypoint-initdb.d/init-scripts/99-roles.sql
+COPY docker/init-scripts/webhooks.sql                     /docker-entrypoint-initdb.d/init-scripts/98-webhooks.sql
+COPY docker/init-scripts/migrations/_supabase.sql         /docker-entrypoint-initdb.d/migrations/97-_supabase.sql
+COPY docker/init-scripts/migrations/realtime.sql          /docker-entrypoint-initdb.d/migrations/99-realtime.sql
+COPY docker/init-scripts/migrations/logs.sql              /docker-entrypoint-initdb.d/migrations/99-logs.sql
+COPY docker/init-scripts/migrations/pooler.sql            /docker-entrypoint-initdb.d/migrations/99-pooler.sql

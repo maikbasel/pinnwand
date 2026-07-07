@@ -1,0 +1,18 @@
+# syntax=docker/dockerfile:1.7
+
+# Derived PostgREST image.
+#
+# The upstream postgrest/postgrest image is distroless — the only executable is
+# /bin/postgrest, with no shell, wget, or curl — so a Docker/Coolify healthcheck
+# has nothing to probe an HTTP endpoint with. Upstream declines to add tooling
+# to that image (see PostgREST discussion #3854), so we copy a single static
+# musl busybox in to get a `wget` for the healthcheck. busybox:musl is fully
+# statically linked, so it runs in the distroless image with no libc present.
+#
+# Pin must match the version used everywhere else (docker-compose.yml,
+# docker-compose.e2e.yml). The healthcheck itself lives in
+# docker-compose.coolify.yml, hitting PostgREST's admin-server /ready endpoint.
+FROM busybox:musl AS busybox
+
+FROM postgrest/postgrest:v12.2.12
+COPY --from=busybox /bin/busybox /bin/busybox

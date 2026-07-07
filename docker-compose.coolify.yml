@@ -1,0 +1,297 @@
+# Production stack deployed via Coolify. Coolify fronts three services on three
+# domains via its built-in reverse proxy (configured in the service's "Domains
+# for <service>" fields, not via env vars):
+#   web:8080      → public web hostname
+#   kong:8000     → ${API_EXTERNAL_URL}
+#   studio:3000   → public studio hostname (put an SSO/auth proxy in front)
+#
+# Studio access model: Studio has no built-in auth and the container is
+# reachable on the compose network without credentials; never expose port 3000
+# directly. Front the studio hostname with an SSO/auth proxy.
+#
+# Required Coolify-injected env vars (gated by ${VAR:?…} below; `docker compose
+# config` fails fast if any are missing):
+#   POSTGRES_PASSWORD, JWT_SECRET, ANON_KEY, SERVICE_ROLE_KEY,
+#   REALTIME_ENC_KEY (exactly 16 bytes, `openssl rand -hex 8`),
+#   REALTIME_SECRET_KEY_BASE (at least 64 bytes, `openssl rand -hex 32`),
+#   SITE_URL, API_EXTERNAL_URL,
+#   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, EMAIL_FROM
+
+services:
+  db:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: postgres
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      JWT_EXP: "3600"
+      ANON_KEY: ${ANON_KEY:?ANON_KEY must be set}
+      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY:?SERVICE_ROLE_KEY must be set}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U postgres -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  migrate:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: migrate
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@db:5432/postgres
+      PGSSLMODE: disable
+    restart: "no"
+
+  auth:
+    image: supabase/gotrue:v2.189.0
+    restart: unless-stopped
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    environment:
+      API_EXTERNAL_URL: ${API_EXTERNAL_URL:?API_EXTERNAL_URL must be set}
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: "9999"
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@db:5432/postgres
+      GOTRUE_SITE_URL: ${SITE_URL:?SITE_URL must be set}
+      GOTRUE_URI_ALLOW_LIST: ${SITE_URL:?SITE_URL must be set}
+      GOTRUE_DISABLE_SIGNUP: "true"
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: "3600"
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_MAILER_AUTOCONFIRM: "false"
+      GOTRUE_MAILER_SECURE_EMAIL_CHANGE_ENABLED: "true"
+      GOTRUE_SMTP_HOST: ${SMTP_HOST:?SMTP_HOST must be set}
+      GOTRUE_SMTP_PORT: ${SMTP_PORT:?SMTP_PORT must be set}
+      GOTRUE_SMTP_USER: ${SMTP_USER:?SMTP_USER must be set}
+      GOTRUE_SMTP_PASS: ${SMTP_PASS:?SMTP_PASS must be set}
+      GOTRUE_SMTP_SENDER_NAME: Pinnwand
+      GOTRUE_SMTP_ADMIN_EMAIL: ${EMAIL_FROM:?EMAIL_FROM must be set}
+      GOTRUE_MAILER_URLPATHS_INVITE: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /auth/v1/verify
+      # Rate limits, prod only. Local dev (docker-compose.yml) and the sealed
+      # e2e stack (docker-compose.e2e.yml) run with GoTrue's defaults so test
+      # suites and rapid iteration aren't gated. Setting RATE_LIMIT_HEADER
+      # switches every limit from instance-global to per-IP, which closes the
+      # unknown-email enumeration vector on /auth/v1/otp. Coolify's Traefik
+      # populates X-Forwarded-For with the real client IP; Kong forwards it.
+      GOTRUE_RATE_LIMIT_HEADER: X-Forwarded-For
+      # 10 magic-link emails per hour per IP. Real sign-in traffic is 1-2/hour;
+      # an enumeration probe stops after 10 attempts.
+      GOTRUE_RATE_LIMIT_EMAIL_SENT: "10"
+      # 30 OTP verifications per 5 min per IP, leaves headroom for legitimate
+      # wrong-code retries before the user gets locked out.
+      GOTRUE_RATE_LIMIT_VERIFY: "30"
+      # 150 token refreshes per 5 min per IP (default); refresh runs hourly per
+      # tab and in the background, so the default is safe.
+      GOTRUE_RATE_LIMIT_TOKEN_REFRESH: "150"
+      # 60-second per-email resend cooldown, prevents "spam the resend button"
+      # from burning the hourly email budget.
+      GOTRUE_SMTP_MAX_FREQUENCY: 60s
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9999/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  rest:
+    # Derived image (docker/Dockerfile.rest): upstream postgrest/postgrest is
+    # distroless (only /bin/postgrest, no shell, wget, or curl), so a plain
+    # healthcheck can never run and the container reports unhealthy forever,
+    # dragging the whole Coolify resource down. The derived image adds a single
+    # static busybox purely for the healthcheck below.
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.rest
+    restart: unless-stopped
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@db:5432/postgres
+      PGRST_DB_SCHEMAS: public,graphql_public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      # Admin server exposes /live and /ready. /ready returns 200 only when the
+      # DB connection is up AND the schema cache is loaded, a real readiness
+      # signal, not just "process running". Internal only; never exposed/routed.
+      PGRST_ADMIN_SERVER_PORT: "3001"
+    healthcheck:
+      # busybox is the only HTTP client in the derived image. Exec form (CMD,
+      # not CMD-SHELL) so it runs without a shell, which the image lacks.
+      test: ["CMD", "/bin/busybox", "wget", "-q", "--spider", "http://localhost:3001/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  realtime:
+    # The dot-name matches the seeded tenant external_id (`realtime-dev`) and
+    # also serves as kong's upstream hostname for /realtime/v1/* (see
+    # docker/kong.yml). Without this alias Kong cannot resolve the upstream and
+    # every WebSocket upgrade fails.
+    hostname: realtime-dev.supabase-realtime
+    image: supabase/realtime:v2.93.2
+    restart: unless-stopped
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    environment:
+      PORT: "4000"
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: supabase_admin
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      DB_NAME: postgres
+      DB_AFTER_CONNECT_QUERY: "SET search_path TO _realtime"
+      # Realtime encrypts the `_realtime.tenants` row with AES-128-ECB, which
+      # requires the key to be exactly 16 bytes. Generate with:
+      # `openssl rand -hex 8` (→ 16 hex chars = 16 bytes).
+      DB_ENC_KEY: ${REALTIME_ENC_KEY:?REALTIME_ENC_KEY must be set (exactly 16 bytes, e.g. `openssl rand -hex 8`)}
+      API_JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      METRICS_JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      # Phoenix's cookie session store validates that SECRET_KEY_BASE is ≥ 64
+      # bytes. Generate with: `openssl rand -hex 32` (→ 64 chars).
+      SECRET_KEY_BASE: ${REALTIME_SECRET_KEY_BASE:?REALTIME_SECRET_KEY_BASE must be set (at least 64 bytes, e.g. `openssl rand -hex 32`)}
+      ERL_AFLAGS: -proto_dist inet_tcp
+      DNS_NODES: "''"
+      RLIMIT_NOFILE: "10000"
+      APP_NAME: realtime
+      SEED_SELF_HOST: "true"
+      RUN_JANITOR: "true"
+    healthcheck:
+      # Realtime has no route at `/`; Phoenix returns 404. Drop `-f` so the
+      # check passes on any HTTP response; we only need to confirm the server
+      # is listening.
+      test: ["CMD", "curl", "-sS", "-o", "/dev/null", "http://localhost:4000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  kong:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.kong
+    restart: unless-stopped
+    depends_on:
+      auth: { condition: service_started }
+      rest: { condition: service_started }
+      realtime: { condition: service_started }
+    expose:
+      - "8000"
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /home/kong/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_PLUGINS: request-transformer,cors,key-auth,acl,basic-auth
+      KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
+      KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
+      SUPABASE_ANON_KEY: ${ANON_KEY:?ANON_KEY must be set}
+      SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY:?SERVICE_ROLE_KEY must be set}
+    entrypoint:
+      - bash
+      - -c
+      - 'sed -e "s|\$$SUPABASE_ANON_KEY|$$SUPABASE_ANON_KEY|g" -e "s|\$$SUPABASE_SERVICE_KEY|$$SUPABASE_SERVICE_KEY|g" /home/kong/temp.yml > /home/kong/kong.yml && /docker-entrypoint.sh kong docker-start'
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: runtime
+      args:
+        # Vite inlines VITE_* at build time, so these must be build args; a
+        # runtime env on the web container is never read.
+        VITE_SUPABASE_URL: ${API_EXTERNAL_URL:?API_EXTERNAL_URL must be set}
+        VITE_SUPABASE_ANON_KEY: ${ANON_KEY:?ANON_KEY must be set}
+    restart: unless-stopped
+    depends_on:
+      kong: { condition: service_started }
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  meta:
+    image: supabase/postgres-meta:v0.96.5
+    restart: unless-stopped
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    environment:
+      PG_META_PORT: "8080"
+      PG_META_DB_HOST: db
+      PG_META_DB_PORT: "5432"
+      PG_META_DB_NAME: postgres
+      PG_META_DB_USER: supabase_admin
+      PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:8080/').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  studio:
+    image: supabase/studio:2026.05.04-sha-e540f90
+    restart: unless-stopped
+    depends_on:
+      meta: { condition: service_started }
+    environment:
+      STUDIO_PG_META_URL: http://meta:8080
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      DEFAULT_ORGANIZATION_NAME: pinnwand
+      DEFAULT_PROJECT_NAME: pinnwand
+      SUPABASE_URL: http://kong:8000
+      SUPABASE_PUBLIC_URL: ${API_EXTERNAL_URL:?API_EXTERNAL_URL must be set}
+      SUPABASE_ANON_KEY: ${ANON_KEY:?ANON_KEY must be set}
+      SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY:?SERVICE_ROLE_KEY must be set}
+      LOGFLARE_API_KEY: not-used
+      LOGFLARE_URL: http://localhost
+      NEXT_PUBLIC_ENABLE_LOGS: "false"
+      # Studio's `server.js` reads `HOSTNAME` for the bind address. Without
+      # this, Next.js 16 in this image binds only to the container's network IP
+      # and `localhost:3000` healthchecks fail.
+      HOSTNAME: "0.0.0.0"
+      # Studio 2026.04.27+ scandir's these paths at runtime; the image ships
+      # without the directories, so tmpfs (empty, in-memory) satisfies the
+      # module-load asserts and the Auth → Add user handlers.
+      SNIPPETS_MANAGEMENT_FOLDER: /app/snippets
+      EDGE_FUNCTIONS_MANAGEMENT_FOLDER: /app/edge-functions
+    tmpfs:
+      - /app/snippets
+      - /app/edge-functions
+    expose:
+      - "3000"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "node -e \"fetch('http://localhost:3000/api/platform/profile').then((r) => {if (r.status !== 200) throw new Error(r.status)})\""
+      interval: 5s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:

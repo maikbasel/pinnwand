@@ -1,0 +1,17 @@
+# Bakes the Kong declarative config into the image so production deploys
+# don't rely on host bind-mounts. Same reasoning as Dockerfile.db: Coolify
+# runs `docker compose` inside a helper container, so relative bind-mount
+# sources on the host resolve to nothing and Docker silently mounts empty
+# directories in their place. Kong then tries to parse an empty kong.yml
+# and dies with "expected an object".
+#
+# Dev (`docker-compose.yml`) and e2e (`docker-compose.e2e.yml`) keep using
+# bind-mounts because there the daemon and the project dir share a filesystem.
+#
+# The entrypoint in compose still runs `sed` at startup to substitute
+# $SUPABASE_ANON_KEY / $SUPABASE_SERVICE_KEY into the config — those are
+# runtime env vars, not buildtime.
+
+FROM kong:2.8.1
+
+COPY docker/kong.yml /home/kong/temp.yml

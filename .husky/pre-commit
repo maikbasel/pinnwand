@@ -1,0 +1,19 @@
+#!/usr/bin/env sh
+# Format + lint-fix staged files before every commit. Ultracite (Biome) runs
+# across the repo (fast), then only the originally-staged files are re-added so
+# the commit picks up the fixes without pulling in unrelated working-tree edits.
+# `set -e` aborts the commit if Ultracite finds an issue it cannot auto-fix.
+set -e
+
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMR)
+if [ -z "$STAGED_FILES" ]; then
+  exit 0
+fi
+
+pnpm exec ultracite fix
+
+echo "$STAGED_FILES" | while IFS= read -r file; do
+  if [ -f "$file" ]; then
+    git add "$file"
+  fi
+done

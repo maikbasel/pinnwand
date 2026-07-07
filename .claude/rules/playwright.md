@@ -35,6 +35,8 @@ Rules:
 
 The whole point of this app is realtime sync between two users. Tests that exercise sync use `browser.newContext()` twice (one per user), perform an action in context A, and assert the change appears in context B. A single-context realtime test is a smoke test, not a sync test.
 
-## Local Supabase for e2e
+## Supabase stack for e2e
 
-Run e2e against `supabase start` (local stack) and seed test data through the admin API in `globalSetup`. Reset the DB between test files via a transaction wrapper or migration replay — flaky cross-test contamination kills the suite.
+Run e2e against the sealed Dockerized stack in `docker-compose.e2e.yml` (own `pinnwand-e2e` Compose project, no host ports, isolated from the dev stack). `pnpm e2e` builds + boots it and runs the `playwright` service against it; the same `migrate` init container applies the migrations. Never point e2e at `supabase start`.
+
+Mint test data per spec through the admin API (`e2e/helpers/direct-auth.ts`), not a shared seed, and clean up in `finally`. The suite runs `fullyParallel`, so specs that mutate board-scoped state must self-isolate with a fresh user (`test.use({ storageState: { cookies: [], origins: [] } })` + `createAuthenticatedUser(page)`) — cross-test contamination on a shared session kills the suite. `e2e/global-teardown.ts` sweeps any leaked `e2e-` users after the run.
