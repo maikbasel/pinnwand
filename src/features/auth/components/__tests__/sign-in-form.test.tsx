@@ -15,6 +15,7 @@ import {
   EMAIL_LABEL,
   ERROR_OTP_INVALID,
   ERROR_RATE_LIMIT,
+  ERROR_TRANSPORT,
   OTP_HEADING,
   OTP_SENT_NEUTRAL,
 } from "../../lib/copy";
@@ -145,6 +146,84 @@ describe("SignInForm", () => {
       expect(screen.getByText(ERROR_OTP_INVALID)).toBeInTheDocument()
     );
     expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a resend failure below the code cells without leaving the OTP step", async () => {
+    vi.useFakeTimers();
+    try {
+      renderForm();
+      fireEvent.change(screen.getByLabelText(EMAIL_LABEL), {
+        target: { value: "alice@dev.local" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: CTA_SEND_CODE }));
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(screen.getByText(OTP_HEADING)).toBeInTheDocument();
+
+      // Clear the cooldown so the resend button is enabled again.
+      act(() => {
+        vi.advanceTimersByTime(RESEND_COOLDOWN_MS);
+      });
+
+      // The resend hits a rate limit (not existence-revealing: an unknown email
+      // is a 422, which stays silent).
+      requestMagicLink.mockRejectedValueOnce(
+        Object.assign(new Error("rate"), { status: 429 })
+      );
+      fireEvent.click(screen.getByRole("button", { name: CTA_RESEND }));
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(screen.getByText(ERROR_RATE_LIMIT)).toBeInTheDocument();
+      expect(screen.getByText(OTP_HEADING)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps resend enabled after a transport failure (nothing was sent)", async () => {
+    vi.useFakeTimers();
+    try {
+      renderForm();
+      fireEvent.change(screen.getByLabelText(EMAIL_LABEL), {
+        target: { value: "alice@dev.local" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: CTA_SEND_CODE }));
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(screen.getByText(OTP_HEADING)).toBeInTheDocument();
+
+      // Clear the initial cooldown so resend is enabled again.
+      act(() => {
+        vi.advanceTimersByTime(RESEND_COOLDOWN_MS);
+      });
+
+      // A transport failure (no status) must not start a new cooldown.
+      requestMagicLink.mockRejectedValueOnce(new Error("network down"));
+      fireEvent.click(screen.getByRole("button", { name: CTA_RESEND }));
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(screen.getByText(ERROR_TRANSPORT)).toBeInTheDocument();
+      // Still immediately resendable: no countdown, button enabled.
+      expect(screen.getByRole("button", { name: CTA_RESEND })).toBeEnabled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("disables resend with a countdown, then re-enables once the cooldown expires", async () => {

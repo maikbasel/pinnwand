@@ -28,9 +28,12 @@ export function readStoredSession(): AuthSession | null {
       return null;
     }
     const parsed: unknown = JSON.parse(raw);
-    return StoredSessionShape.safeParse(parsed).success
-      ? (parsed as AuthSession)
-      : null;
+    if (!StoredSessionShape.safeParse(parsed).success) {
+      return null;
+    }
+    // Validated: `parsed` carries at least the guard's fields. Widen to the
+    // SDK's Session, which owns the full persisted shape.
+    return parsed as AuthSession;
   } catch {
     return null;
   }

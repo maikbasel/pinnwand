@@ -57,7 +57,13 @@ export function SignInForm({ redirect }: { redirect: string }) {
   const signIn = useSignIn();
   const verify = useVerifyOtp();
 
-  const startCooldown = () => setCooldownUntil(Date.now() + RESEND_COOLDOWN_MS);
+  const startCooldown = () => {
+    // Reset `now` alongside the deadline so the first rendered countdown reads
+    // exactly RESEND_COOLDOWN_SECONDS, not one second more from a stale `now`.
+    const t = Date.now();
+    setNow(t);
+    setCooldownUntil(t + RESEND_COOLDOWN_MS);
+  };
 
   useEffect(() => {
     if (cooldownUntil === 0) {
@@ -78,20 +84,35 @@ export function SignInForm({ redirect }: { redirect: string }) {
     signIn.isPending || verify.isPending || remainingSeconds > 0;
 
   async function send(): Promise<void> {
-    setEmailError(null);
+    // On the OTP step this runs as a resend, so surface failures below the code
+    // cells; on the email step, under the email field. The 422 anti-enumeration
+    // path stays silent either way, so neither surface leaks whether the address
+    // is enrolled.
+    const showError = step === "otp" ? setOtpError : setEmailError;
+    showError(null);
     try {
       await signIn.mutateAsync({ email, redirectTo: callbackUrl(redirect) });
       setStep("otp");
       startCooldown();
     } catch (error) {
-      startCooldown();
       const kind = classifyEmailSubmitError(error);
       if (kind === "anti-enumeration") {
-        // Never reveal that the address is unknown. Advance as if sent.
+        // Never reveal that the address is unknown. Advance as if sent, and
+        // run the cooldown so the resend cadence is indistinguishable from a
+        // real send.
+        startCooldown();
         setStep("otp");
         return;
       }
-      setEmailError(kind === "rate-limit" ? ERROR_RATE_LIMIT : ERROR_TRANSPORT);
+      if (kind === "rate-limit") {
+        // The server is throttling; back off before allowing another attempt.
+        startCooldown();
+        showError(ERROR_RATE_LIMIT);
+        return;
+      }
+      // Transport failure: nothing left the device, so don't lock resend. The
+      // user can retry the moment connectivity returns.
+      showError(ERROR_TRANSPORT);
     }
   }
 
