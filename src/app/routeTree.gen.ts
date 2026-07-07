@@ -10,53 +10,74 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SignInRouteImport } from './routes/sign-in'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as BoardsBoardIdRouteImport } from './routes/boards.$boardId'
+import { Route as AuthedRouteImport } from './routes/_authed'
+import { Route as AuthedIndexRouteImport } from './routes/_authed.index'
+import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
+import { Route as AuthedBoardsBoardIdRouteImport } from './routes/_authed.boards.$boardId'
 
 const SignInRoute = SignInRouteImport.update({
   id: '/sign-in',
   path: '/sign-in',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const AuthedRoute = AuthedRouteImport.update({
+  id: '/_authed',
   getParentRoute: () => rootRouteImport,
 } as any)
-const BoardsBoardIdRoute = BoardsBoardIdRouteImport.update({
+const AuthedIndexRoute = AuthedIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthCallbackRoute = AuthCallbackRouteImport.update({
+  id: '/auth/callback',
+  path: '/auth/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthedBoardsBoardIdRoute = AuthedBoardsBoardIdRouteImport.update({
   id: '/boards/$boardId',
   path: '/boards/$boardId',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AuthedRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
+  '/': typeof AuthedIndexRoute
   '/sign-in': typeof SignInRoute
-  '/boards/$boardId': typeof BoardsBoardIdRoute
+  '/auth/callback': typeof AuthCallbackRoute
+  '/boards/$boardId': typeof AuthedBoardsBoardIdRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
   '/sign-in': typeof SignInRoute
-  '/boards/$boardId': typeof BoardsBoardIdRoute
+  '/auth/callback': typeof AuthCallbackRoute
+  '/': typeof AuthedIndexRoute
+  '/boards/$boardId': typeof AuthedBoardsBoardIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
+  '/_authed': typeof AuthedRouteWithChildren
   '/sign-in': typeof SignInRoute
-  '/boards/$boardId': typeof BoardsBoardIdRoute
+  '/auth/callback': typeof AuthCallbackRoute
+  '/_authed/': typeof AuthedIndexRoute
+  '/_authed/boards/$boardId': typeof AuthedBoardsBoardIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/sign-in' | '/boards/$boardId'
+  fullPaths: '/' | '/sign-in' | '/auth/callback' | '/boards/$boardId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/sign-in' | '/boards/$boardId'
-  id: '__root__' | '/' | '/sign-in' | '/boards/$boardId'
+  to: '/sign-in' | '/auth/callback' | '/' | '/boards/$boardId'
+  id:
+    | '__root__'
+    | '/_authed'
+    | '/sign-in'
+    | '/auth/callback'
+    | '/_authed/'
+    | '/_authed/boards/$boardId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
+  AuthedRoute: typeof AuthedRouteWithChildren
   SignInRoute: typeof SignInRoute
-  BoardsBoardIdRoute: typeof BoardsBoardIdRoute
+  AuthCallbackRoute: typeof AuthCallbackRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -68,27 +89,54 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SignInRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
+    '/_authed': {
+      id: '/_authed'
+      path: ''
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+      preLoaderRoute: typeof AuthedRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/boards/$boardId': {
-      id: '/boards/$boardId'
+    '/_authed/': {
+      id: '/_authed/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof AuthedIndexRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/auth/callback': {
+      id: '/auth/callback'
+      path: '/auth/callback'
+      fullPath: '/auth/callback'
+      preLoaderRoute: typeof AuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authed/boards/$boardId': {
+      id: '/_authed/boards/$boardId'
       path: '/boards/$boardId'
       fullPath: '/boards/$boardId'
-      preLoaderRoute: typeof BoardsBoardIdRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AuthedBoardsBoardIdRouteImport
+      parentRoute: typeof AuthedRoute
     }
   }
 }
 
+interface AuthedRouteChildren {
+  AuthedIndexRoute: typeof AuthedIndexRoute
+  AuthedBoardsBoardIdRoute: typeof AuthedBoardsBoardIdRoute
+}
+
+const AuthedRouteChildren: AuthedRouteChildren = {
+  AuthedIndexRoute: AuthedIndexRoute,
+  AuthedBoardsBoardIdRoute: AuthedBoardsBoardIdRoute,
+}
+
+const AuthedRouteWithChildren =
+  AuthedRoute._addFileChildren(AuthedRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
+  AuthedRoute: AuthedRouteWithChildren,
   SignInRoute: SignInRoute,
-  BoardsBoardIdRoute: BoardsBoardIdRoute,
+  AuthCallbackRoute: AuthCallbackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

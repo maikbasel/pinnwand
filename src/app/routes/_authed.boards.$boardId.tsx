@@ -3,7 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { TASK_COLUMNS } from "@/features/tasks/columns";
 
-export const Route = createFileRoute("/boards/$boardId")({
+export const Route = createFileRoute("/_authed/boards/$boardId")({
   component: BoardView,
 });
 

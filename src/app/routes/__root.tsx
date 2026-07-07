@@ -2,6 +2,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { createRootRouteWithContext, Outlet } from "@tanstack/react-router";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "sonner";
+import { AuthSync } from "@/features/auth";
 
 type RouterContext = {
   queryClient: QueryClient;
@@ -20,6 +21,7 @@ function RootLayout() {
       storageKey="theme"
     >
       <div className="mx-auto flex h-full max-w-6xl flex-col">
+        <AuthSync />
         <Outlet />
       </div>
       <Toaster position="top-center" richColors />

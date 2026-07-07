@@ -3,6 +3,7 @@ import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { seedSessionFromStorage } from "@/features/auth";
 import {
   cacheBuster,
   createIdbPersister,
@@ -31,6 +32,11 @@ if (typeof navigator !== "undefined") {
 // write queued in a prior offline session. A resumed mutation has no React
 // hook to supply its mutationFn. The `tasks` slice will add
 // `registerTaskMutationDefaults(queryClient)` at this point.
+
+// Prime the session cache synchronously from Supabase's stored blob so the
+// route guard resolves a returning user on a cold (possibly offline) boot
+// without a blocking getSession().
+seedSessionFromStorage(queryClient);
 
 const persister = createIdbPersister();
 // The buster folds in the user id read synchronously from the persisted
