@@ -1,4 +1,5 @@
 import { expect } from "@playwright/test";
+import { ACCOUNT_LABEL } from "@/features/navigation/lib/copy";
 import { test } from "./fixtures";
 import { adminClient, createAuthenticatedUser } from "./helpers/direct-auth";
 import { extractOtpCode, waitForEmail } from "./helpers/mailpit";
@@ -22,13 +23,17 @@ test("redirects an anonymous visitor to sign-in", async ({
 
 test("an authenticated user reaches the app and can sign out", async ({
   page,
-  boardsPage,
 }) => {
   const user = await createAuthenticatedUser(page);
   await expect(page).toHaveURL(APP_ROOT_URL_PATTERN);
-  await expect(boardsPage.heading).toBeVisible();
 
-  await boardsPage.signOutButton.click();
+  // The account control (rail on desktop, top bar on mobile) is the shared
+  // sign-out entry point. Its trigger is a button; the sign-out row inside is a
+  // Base UI menu item targeted by its e2e testid.
+  const accountTrigger = page.getByRole("button", { name: ACCOUNT_LABEL });
+  await expect(accountTrigger).toBeVisible();
+  await accountTrigger.click();
+  await page.getByTestId("account-signout").click();
 
   await expect(page).toHaveURL(SIGN_IN_URL_PATTERN);
   await user.cleanup();

@@ -1,5 +1,6 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router";
-import { requireAuth, SignOutButton } from "@/features/auth";
+import { requireAuth } from "@/features/auth";
+import { NavigationShell } from "@/features/navigation";
 
 export const Route = createFileRoute("/_authed")({
   beforeLoad: requireAuth,
@@ -8,12 +9,8 @@ export const Route = createFileRoute("/_authed")({
 
 function AuthedLayout() {
   return (
-    <div className="flex flex-1 flex-col">
-      <header className="flex items-center justify-between border-b px-4 py-3">
-        <span className="font-semibold tracking-tight">Pinnwand</span>
-        <SignOutButton />
-      </header>
+    <NavigationShell>
       <Outlet />
-    </div>
+    </NavigationShell>
   );
 }

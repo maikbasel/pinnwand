@@ -172,3 +172,39 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+/* Pinnwand brand mark. The `default` variant carries fixed brand colours
+   regardless of light/dark — a logo identity, not a UI token. The contextual
+   variants (`mono`, `ghost`, `inverted`) bind to live theme tokens so they
+   adapt to the surface they sit on. Callers can still override `.pinnwand-bg`
+   / `.pinnwand-glyph` directly. Geometry is shared with public/favicon.svg. */
+.pinnwand-logo {
+  display: block;
+}
+.pinnwand-logo-default .pinnwand-bg {
+  fill: #3b82f6;
+}
+.pinnwand-logo-default .pinnwand-glyph {
+  fill: #fff;
+}
+.pinnwand-logo-inverted .pinnwand-bg {
+  fill: var(--foreground);
+}
+.pinnwand-logo-inverted .pinnwand-glyph {
+  fill: var(--primary);
+}
+.pinnwand-logo-ghost .pinnwand-bg {
+  fill: transparent;
+}
+.pinnwand-logo-ghost .pinnwand-glyph {
+  fill: var(--foreground);
+}
+.pinnwand-logo-mono {
+  color: var(--foreground);
+}
+.pinnwand-logo-mono .pinnwand-bg {
+  fill: transparent;
+}
+.pinnwand-logo-mono .pinnwand-glyph {
+  fill: currentColor;
+}

@@ -29,16 +29,17 @@ Core meal planning works offline; sharing does not. The app is offline-first for
 
 ## Icons and manifest
 
-- The single source of truth is `public/favicon.svg` (the Mahlzeit "M" mark, 1024×1024 with `.mahlzeit-bg` / `.mahlzeit-glyph` class hooks).
+- The single source of truth is `public/favicon.svg` (the Pinnwand pushpin mark: a rounded blue tile with `.pinnwand-bg` / `.pinnwand-glyph` class hooks). It is built from plain `<rect>` + a triangle `<path>` only — **no `<text>`, no negative-scale transforms, no `oklch()` colours**. resvg (the rasterizer `@vite-pwa/assets-generator` uses) drops glyphs under some flipped/complex transforms and cannot parse `oklch()`, which is how an icon renders as an empty coloured tile on an Android PWA. Keep the source rasterizer-safe.
 - PNGs (`pwa-64`, `pwa-192`, `pwa-512`, `maskable-icon-512`, `apple-touch-icon-180`, `favicon.ico`) are generated from the SVG by `@vite-pwa/assets-generator` — config in `pwa-assets.config.ts`, run via `pnpm generate-pwa-assets`. Regenerate and commit the PNGs whenever the source SVG changes.
+- **The maskable and apple presets fill their padding with a solid brand-blue `background` (`pwa-assets.config.ts`), so those icons are 0% transparent — never an empty tile on Android.** After regenerating, verify the glyph actually rasterized (don't trust the generator): sample the PNGs and confirm both background-blue and glyph-white pixels are present, e.g. decode `public/pwa-512x512.png` with `sharp` and assert a few % white. A solid tile with no glyph is the empty-icon bug.
 - `vite-plugin-pwa` is configured with `pwaAssets: { config: true, overrideManifestIcons: true }` so the build-time PWA HTML head injection (favicon links + apple-touch-icon) and manifest `icons` array are derived from the generator's output. **Do not hand-maintain `<link rel="apple-touch-icon">` in `index.html`** — VitePWA emits it.
 - `display: standalone`, `theme_color` matches the Tailwind app theme, `start_url: '/'`.
 - Test the install prompt on real Android Chrome before shipping a manifest change — the prompt is fragile.
 
 ## In-app logo component
 
-- `src/shared/components/mahlzeit-logo.tsx` (`<MahlzeitLogo variant size title />`) is the canonical in-app brand mark. Variants (`default` | `inverted` | `paper` | `mono` | `ghost`) map to CSS classes in `src/app/index.css` that bind to the `--mz-*` palette, so dark mode swaps automatically.
-- Pass `title={null}` when the mark is decorative (e.g. next to a labelled `<h1>`); pass a string for standalone uses (sign-in screen, offline page).
+- `src/shared/components/pinnwand-logo.tsx` (`<PinnwandLogo variant size title />`) is the canonical in-app brand mark. Its SVG geometry is the single source of truth shared with `public/favicon.svg`. Variants (`default` | `inverted` | `mono` | `ghost`) map to CSS classes in `src/app/index.css`; `default` carries fixed brand colours (blue tile, white glyph), the others bind to theme tokens so dark mode swaps automatically.
+- Pass `title={null}` when the mark is decorative (e.g. next to the visible `Pinnwand` wordmark in the rail header / mobile top bar); pass a string for standalone uses (sign-in screen). Current placements: sidebar rail header, mobile `TopAppBar` brand slot, `/sign-in`.
 
 ## iOS
 
