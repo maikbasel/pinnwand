@@ -1,16 +1,18 @@
+import { Button } from "@/shared/components/ui/button";
 import { useSignOut } from "../hooks/use-sign-out";
 import { SIGN_OUT } from "../lib/copy";
 
 export function SignOutButton() {
   const signOut = useSignOut();
   return (
-    <button
-      className="rounded-md px-3 py-2 font-medium text-muted-foreground text-sm hover:text-foreground disabled:opacity-60"
+    <Button
       disabled={signOut.isPending}
       onClick={() => signOut.mutate()}
+      size="sm"
       type="button"
+      variant="ghost"
     >
       {SIGN_OUT}
-    </button>
+    </Button>
   );
 }
