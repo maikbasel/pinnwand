@@ -37,6 +37,12 @@ export function CreateBoardEntry({ onCreated }: CreateBoardEntryProps) {
   }
 
   async function commit(): Promise<void> {
+    // The input stays mounted-but-disabled while pending, and disabling a
+    // focused input fires onBlur -> commit again; bail so a single create never
+    // double-fires a second create_board (there is no mutation-level dedupe).
+    if (createBoard.isPending) {
+      return;
+    }
     const trimmed = name.trim();
     if (!trimmed) {
       reset();
