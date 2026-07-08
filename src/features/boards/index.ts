@@ -3,6 +3,7 @@
 // shared), rename, delete, and the join-code sharing surface.
 export { BOARD_KEYS } from "./api/boards";
 export { BoardDetailPage } from "./components/board-detail-page";
+export { BoardEmptyPane } from "./components/board-empty-pane";
 export { BoardsPage } from "./components/boards-page";
 export { JoinBoardPage } from "./components/join-board-page";
 export { useCreateBoard } from "./hooks/use-create-board";

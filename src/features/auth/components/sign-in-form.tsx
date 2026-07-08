@@ -1,6 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
 import { REGEXP_ONLY_DIGITS } from "input-otp";
 import { type FormEvent, useEffect, useState } from "react";
+import { Alert, AlertDescription } from "@/shared/components/ui/alert";
 import { Button } from "@/shared/components/ui/button";
 import {
   Card,
@@ -182,9 +183,9 @@ export function SignInForm({ redirect }: { redirect: string }) {
             </InputOTP>
           </div>
           {otpError ? (
-            <p className="text-center text-destructive text-sm" role="alert">
-              {otpError}
-            </p>
+            <Alert variant="destructive">
+              <AlertDescription>{otpError}</AlertDescription>
+            </Alert>
           ) : null}
           <div className="flex flex-col gap-1">
             <Button
@@ -242,9 +243,9 @@ export function SignInForm({ redirect }: { redirect: string }) {
             />
           </div>
           {emailError ? (
-            <p className="text-destructive text-sm" role="alert">
-              {emailError}
-            </p>
+            <Alert variant="destructive">
+              <AlertDescription>{emailError}</AlertDescription>
+            </Alert>
           ) : null}
           <Button className="w-full" disabled={signIn.isPending} type="submit">
             {signIn.isPending ? CTA_SENDING : CTA_SEND_CODE}

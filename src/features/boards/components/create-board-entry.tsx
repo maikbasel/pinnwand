@@ -1,5 +1,6 @@
 import { Check, Plus, X } from "lucide-react";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { Alert, AlertDescription } from "@/shared/components/ui/alert";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { useCreateBoard } from "../hooks/use-create-board";
@@ -112,9 +113,9 @@ export function CreateBoardEntry({ onCreated }: CreateBoardEntryProps) {
         </Button>
       </div>
       {error ? (
-        <p className="text-destructive text-sm" role="alert">
-          {error}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : null}
     </div>
   );

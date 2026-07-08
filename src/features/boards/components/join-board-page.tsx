@@ -1,7 +1,8 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { useState } from "react";
-import { Button } from "@/shared/components/ui/button";
+import { Alert, AlertDescription } from "@/shared/components/ui/alert";
+import { Button, buttonVariants } from "@/shared/components/ui/button";
 import {
   Card,
   CardContent,
@@ -15,6 +16,7 @@ import {
   InputOTPSeparator,
   InputOTPSlot,
 } from "@/shared/components/ui/input-otp";
+import { cn } from "@/shared/lib/utils";
 import { useJoinBoard } from "../hooks/use-join-board";
 import { classifyJoinError } from "../lib/classify-join-error";
 import {
@@ -75,7 +77,10 @@ export function JoinBoardPage() {
     <div className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-4 py-6 sm:px-6">
       <Link
         aria-label={BACK_LABEL}
-        className="inline-flex w-fit items-center gap-1.5 text-muted-foreground text-sm hover:text-foreground"
+        className={cn(
+          buttonVariants({ variant: "ghost", size: "sm" }),
+          "-ml-2 w-fit gap-1.5 text-muted-foreground"
+        )}
         to="/"
       >
         <ArrowLeft aria-hidden className="size-4" />
@@ -115,9 +120,9 @@ export function JoinBoardPage() {
             </InputOTP>
           </div>
           {error ? (
-            <p className="text-center text-destructive text-sm" role="alert">
-              {error}
-            </p>
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
           ) : null}
           <Button
             disabled={joinBoard.isPending || code.length !== JOIN_CODE_LENGTH}

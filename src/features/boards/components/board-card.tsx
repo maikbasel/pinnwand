@@ -1,13 +1,12 @@
 import { ChevronRight } from "lucide-react";
+import { Badge } from "@/shared/components/ui/badge";
 import { Card } from "@/shared/components/ui/card";
-import { cn } from "@/shared/lib/utils";
 import { ROLE_LABELS } from "../lib/copy";
 import type { BoardMembership } from "../types";
 
-const ROLE_PILL_BASE = "shrink-0 rounded-full px-2 py-0.5 font-medium text-xs";
-const ROLE_PILL_TONE = {
-  owner: "bg-primary/10 text-primary",
-  member: "bg-muted text-muted-foreground",
+const ROLE_BADGE_VARIANT = {
+  owner: "default",
+  member: "secondary",
 } as const;
 
 type BoardCardProps = {
@@ -28,9 +27,7 @@ export function BoardCard({ membership, onOpen }: BoardCardProps) {
         <span className="min-w-0 flex-1 truncate font-medium">
           {board.name}
         </span>
-        <span className={cn(ROLE_PILL_BASE, ROLE_PILL_TONE[role])}>
-          {ROLE_LABELS[role]}
-        </span>
+        <Badge variant={ROLE_BADGE_VARIANT[role]}>{ROLE_LABELS[role]}</Badge>
         <ChevronRight
           aria-hidden
           className="size-4 shrink-0 text-muted-foreground"

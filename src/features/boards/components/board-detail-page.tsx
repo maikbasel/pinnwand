@@ -1,6 +1,8 @@
-import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Pencil } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { Pencil } from "lucide-react";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { ConfirmSheet } from "@/shared/components/confirm-sheet";
+import { Alert, AlertDescription } from "@/shared/components/ui/alert";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent } from "@/shared/components/ui/card";
 import { Input } from "@/shared/components/ui/input";
@@ -10,14 +12,14 @@ import { useLeaveBoard } from "../hooks/use-leave-board";
 import { useMyBoards } from "../hooks/use-my-boards";
 import { useRenameBoard } from "../hooks/use-rename-board";
 import {
-  BACK_LABEL,
   BOARD_NOT_FOUND,
   BOARDS_LOAD_ERROR,
-  CANCEL_LABEL,
   DELETE_BOARD_BUTTON,
   DELETE_BOARD_CONFIRM,
+  DELETE_BOARD_TITLE,
   LEAVE_BOARD_BUTTON,
   LEAVE_BOARD_CONFIRM,
+  LEAVE_BOARD_TITLE,
   RENAME_LABEL,
   TASKS_PLACEHOLDER,
 } from "../lib/copy";
@@ -113,29 +115,23 @@ function BoardHeading({ board, isOwner }: BoardHeadingProps) {
 
 function DeleteBoardControl({ boardId }: { boardId: string }) {
   const [confirming, setConfirming] = useState(false);
-  const cancelRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
   const deleteBoard = useDeleteBoard(boardId);
-
-  useEffect(() => {
-    if (confirming) {
-      cancelRef.current?.focus();
-    }
-  }, [confirming]);
 
   async function confirmDelete(): Promise<void> {
     try {
       await deleteBoard.mutateAsync();
     } catch {
-      // The global toast surfaces the failure; reset so the owner can retry.
+      // The global toast surfaces the failure; close so the owner can retry.
       setConfirming(false);
       return;
     }
+    setConfirming(false);
     await navigate({ to: "/" });
   }
 
-  if (!confirming) {
-    return (
+  return (
+    <>
       <Button
         className="w-full"
         onClick={() => setConfirming(true)}
@@ -144,62 +140,38 @@ function DeleteBoardControl({ boardId }: { boardId: string }) {
       >
         {DELETE_BOARD_BUTTON}
       </Button>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-2 rounded-lg border border-destructive/30 p-3">
-      <p className="text-destructive text-sm">{DELETE_BOARD_CONFIRM}</p>
-      <div className="flex gap-2">
-        <Button
-          className="flex-1"
-          disabled={deleteBoard.isPending}
-          onClick={confirmDelete}
-          type="button"
-          variant="destructive"
-        >
-          {DELETE_BOARD_BUTTON}
-        </Button>
-        <Button
-          className="flex-1"
-          disabled={deleteBoard.isPending}
-          onClick={() => setConfirming(false)}
-          ref={cancelRef}
-          type="button"
-          variant="ghost"
-        >
-          {CANCEL_LABEL}
-        </Button>
-      </div>
-    </div>
+      <ConfirmSheet
+        confirmLabel={DELETE_BOARD_BUTTON}
+        confirmTestId="confirm-delete-board"
+        description={DELETE_BOARD_CONFIRM}
+        onConfirm={confirmDelete}
+        onOpenChange={setConfirming}
+        open={confirming}
+        title={DELETE_BOARD_TITLE}
+      />
+    </>
   );
 }
 
 function LeaveBoardControl({ boardId }: { boardId: string }) {
   const [confirming, setConfirming] = useState(false);
-  const cancelRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
   const leaveBoard = useLeaveBoard(boardId);
-
-  useEffect(() => {
-    if (confirming) {
-      cancelRef.current?.focus();
-    }
-  }, [confirming]);
 
   async function confirmLeave(): Promise<void> {
     try {
       await leaveBoard.mutateAsync();
     } catch {
-      // The global toast surfaces the failure; reset so the user can retry.
+      // The global toast surfaces the failure; close so the user can retry.
       setConfirming(false);
       return;
     }
+    setConfirming(false);
     await navigate({ to: "/" });
   }
 
-  if (!confirming) {
-    return (
+  return (
+    <>
       <Button
         className="w-full border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
         onClick={() => setConfirming(true)}
@@ -208,47 +180,16 @@ function LeaveBoardControl({ boardId }: { boardId: string }) {
       >
         {LEAVE_BOARD_BUTTON}
       </Button>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-2 rounded-lg border border-destructive/30 p-3">
-      <p className="text-destructive text-sm">{LEAVE_BOARD_CONFIRM}</p>
-      <div className="flex gap-2">
-        <Button
-          className="flex-1"
-          disabled={leaveBoard.isPending}
-          onClick={confirmLeave}
-          type="button"
-          variant="destructive"
-        >
-          {LEAVE_BOARD_BUTTON}
-        </Button>
-        <Button
-          className="flex-1"
-          disabled={leaveBoard.isPending}
-          onClick={() => setConfirming(false)}
-          ref={cancelRef}
-          type="button"
-          variant="ghost"
-        >
-          {CANCEL_LABEL}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function BackLink() {
-  return (
-    <Link
-      aria-label={BACK_LABEL}
-      className="inline-flex w-fit items-center gap-1.5 text-muted-foreground text-sm hover:text-foreground"
-      to="/"
-    >
-      <ArrowLeft aria-hidden className="size-4" />
-      {BACK_LABEL}
-    </Link>
+      <ConfirmSheet
+        confirmLabel={LEAVE_BOARD_BUTTON}
+        confirmTestId="confirm-leave-board"
+        description={LEAVE_BOARD_CONFIRM}
+        onConfirm={confirmLeave}
+        onOpenChange={setConfirming}
+        open={confirming}
+        title={LEAVE_BOARD_TITLE}
+      />
+    </>
   );
 }
 
@@ -272,10 +213,9 @@ export function BoardDetailPage({ boardId }: BoardDetailPageProps) {
   if (isError && !membership) {
     return (
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-4 py-6 sm:px-6">
-        <BackLink />
-        <p className="text-destructive text-sm" role="alert">
-          {BOARDS_LOAD_ERROR}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{BOARDS_LOAD_ERROR}</AlertDescription>
+        </Alert>
       </div>
     );
   }
@@ -284,7 +224,6 @@ export function BoardDetailPage({ boardId }: BoardDetailPageProps) {
     return (
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-4 py-6 sm:px-6">
         <p className="text-muted-foreground text-sm">{BOARD_NOT_FOUND}</p>
-        <BackLink />
       </div>
     );
   }
@@ -294,7 +233,6 @@ export function BoardDetailPage({ boardId }: BoardDetailPageProps) {
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-4 py-6 sm:px-6">
-      <BackLink />
       <BoardHeading board={board} isOwner={isOwner} />
       <BoardSharePanel board={board} isOwner={isOwner} />
       <Card className="border-dashed bg-muted/30">

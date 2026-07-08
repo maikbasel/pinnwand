@@ -27,14 +27,18 @@ export const COPY_CODE_COPIED = "Kopiert";
 export const COPY_CODE_ERROR =
   "Kopieren nicht möglich. Markiere den Code und kopiere ihn manuell.";
 export const ROTATE_CODE_BUTTON = "Code neu generieren";
+export const ROTATE_CODE_TITLE = "Neuen Code erzeugen?";
 export const ROTATE_CODE_CONFIRM =
-  "Neuen Code erzeugen? Der alte Code funktioniert danach nicht mehr.";
+  "Der alte Code funktioniert danach nicht mehr.";
 
 export const DELETE_BOARD_BUTTON = "Pinnwand löschen";
+export const DELETE_BOARD_TITLE = "Pinnwand löschen?";
 export const DELETE_BOARD_CONFIRM =
-  "Wirklich löschen? Alle Aufgaben gehen verloren.";
+  "Alle Aufgaben gehen verloren. Das lässt sich nicht rückgängig machen.";
 export const LEAVE_BOARD_BUTTON = "Pinnwand verlassen";
-export const LEAVE_BOARD_CONFIRM = "Pinnwand wirklich verlassen?";
+export const LEAVE_BOARD_TITLE = "Pinnwand verlassen?";
+export const LEAVE_BOARD_CONFIRM =
+  "Du verlierst den Zugriff, bis du erneut mit dem Code beitrittst.";
 
 export const ROLE_LABELS = {
   owner: "Inhaber",
@@ -47,3 +51,7 @@ export const BOARD_NOT_FOUND = "Diese Pinnwand wurde nicht gefunden.";
 export const BACK_LABEL = "Zurück";
 export const CANCEL_LABEL = "Abbrechen";
 export const CONFIRM_LABEL = "Bestätigen";
+
+export const NO_BOARD_SELECTED_HEADING = "Keine Pinnwand ausgewählt";
+export const NO_BOARD_SELECTED_BODY =
+  "Wähle links eine Pinnwand aus oder erstelle eine neue.";

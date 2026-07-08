@@ -1,6 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { BoardsPage } from "@/features/boards";
+import { BoardEmptyPane, BoardsPage } from "@/features/boards";
 
 export const Route = createFileRoute("/_authed/")({
-  component: BoardsPage,
+  component: BoardsIndex,
 });
+
+function BoardsIndex() {
+  return (
+    <>
+      <div className="md:hidden">
+        <BoardsPage />
+      </div>
+      <BoardEmptyPane />
+    </>
+  );
+}

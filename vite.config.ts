@@ -19,6 +19,10 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: "autoUpdate",
+      pwaAssets: {
+        config: true,
+        overrideManifestIcons: true,
+      },
       manifest: {
         name: "Pinnwand",
         short_name: "Pinnwand",

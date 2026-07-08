@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { ConfirmSheet } from "@/shared/components/confirm-sheet";
+import { Alert, AlertDescription } from "@/shared/components/ui/alert";
 import { Button } from "@/shared/components/ui/button";
 import {
   Card,
@@ -9,12 +11,12 @@ import {
 } from "@/shared/components/ui/card";
 import { useRegenerateJoinCode } from "../hooks/use-regenerate-join-code";
 import {
-  CANCEL_LABEL,
   COPY_CODE_BUTTON,
   COPY_CODE_COPIED,
   COPY_CODE_ERROR,
   ROTATE_CODE_BUTTON,
   ROTATE_CODE_CONFIRM,
+  ROTATE_CODE_TITLE,
   SHARE_CODE_HINT,
   SHARE_PANEL_HEADING,
 } from "../lib/copy";
@@ -24,30 +26,20 @@ const COPIED_FEEDBACK_MS = 2000;
 
 function RotateCodeControl({ boardId }: { boardId: string }) {
   const [confirming, setConfirming] = useState(false);
-  const cancelRef = useRef<HTMLButtonElement>(null);
   const regenerateJoinCode = useRegenerateJoinCode(boardId);
-
-  // Move focus onto the safe (cancel) action when the confirm appears, so a
-  // keyboard user does not accidentally rotate the code with a stray Enter.
-  useEffect(() => {
-    if (confirming) {
-      cancelRef.current?.focus();
-    }
-  }, [confirming]);
 
   async function confirmRotate(): Promise<void> {
     try {
       await regenerateJoinCode.mutateAsync();
-      setConfirming(false);
-    } catch {
-      // The global MutationCache toast surfaces the error; reset the control so
-      // the owner can try again.
+    } finally {
+      // Whether it succeeds or the global toast surfaces the failure, close the
+      // confirm so the owner sees the fresh code or can retry.
       setConfirming(false);
     }
   }
 
-  if (!confirming) {
-    return (
+  return (
+    <>
       <Button
         onClick={() => setConfirming(true)}
         type="button"
@@ -55,33 +47,15 @@ function RotateCodeControl({ boardId }: { boardId: string }) {
       >
         {ROTATE_CODE_BUTTON}
       </Button>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-2">
-      <p className="text-muted-foreground text-sm">{ROTATE_CODE_CONFIRM}</p>
-      <div className="flex gap-2">
-        <Button
-          className="flex-1"
-          disabled={regenerateJoinCode.isPending}
-          onClick={confirmRotate}
-          type="button"
-        >
-          {ROTATE_CODE_BUTTON}
-        </Button>
-        <Button
-          className="flex-1"
-          disabled={regenerateJoinCode.isPending}
-          onClick={() => setConfirming(false)}
-          ref={cancelRef}
-          type="button"
-          variant="ghost"
-        >
-          {CANCEL_LABEL}
-        </Button>
-      </div>
-    </div>
+      <ConfirmSheet
+        confirmLabel={ROTATE_CODE_BUTTON}
+        description={ROTATE_CODE_CONFIRM}
+        onConfirm={confirmRotate}
+        onOpenChange={setConfirming}
+        open={confirming}
+        title={ROTATE_CODE_TITLE}
+      />
+    </>
   );
 }
 
@@ -131,9 +105,9 @@ export function BoardSharePanel({ board, isOwner }: BoardSharePanelProps) {
           {copied ? COPY_CODE_COPIED : COPY_CODE_BUTTON}
         </Button>
         {copyFailed ? (
-          <p className="text-destructive text-sm" role="alert">
-            {COPY_CODE_ERROR}
-          </p>
+          <Alert variant="destructive">
+            <AlertDescription>{COPY_CODE_ERROR}</AlertDescription>
+          </Alert>
         ) : null}
         {isOwner ? <RotateCodeControl boardId={board.id} /> : null}
       </CardContent>

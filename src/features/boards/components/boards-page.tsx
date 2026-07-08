@@ -1,4 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
+import { Alert, AlertDescription } from "@/shared/components/ui/alert";
 import { buttonVariants } from "@/shared/components/ui/button";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { cn } from "@/shared/lib/utils";
@@ -45,9 +46,9 @@ export function BoardsPage() {
       ) : null}
 
       {isError ? (
-        <p className="text-destructive text-sm" role="alert">
-          {BOARDS_LOAD_ERROR}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{BOARDS_LOAD_ERROR}</AlertDescription>
+        </Alert>
       ) : null}
 
       {isEmpty ? (
