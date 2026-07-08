@@ -1,5 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { REGEXP_ONLY_DIGITS } from "input-otp";
+import { Loader2 } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -26,7 +27,6 @@ import {
   CTA_SEND_CODE,
   CTA_SENDING,
   CTA_USE_OTHER_EMAIL,
-  CTA_VERIFY,
   CTA_VERIFYING,
   EMAIL_LABEL,
   EMAIL_PLACEHOLDER,
@@ -211,9 +211,16 @@ export function SignInForm({ redirect }: { redirect: string }) {
               {CTA_USE_OTHER_EMAIL}
             </Button>
           </div>
-          <span aria-hidden className="sr-only">
-            {verify.isPending ? CTA_VERIFYING : CTA_VERIFY}
-          </span>
+          {verify.isPending ? (
+            <div
+              aria-live="polite"
+              className="flex items-center justify-center gap-2 text-muted-foreground text-sm"
+              role="status"
+            >
+              <Loader2 aria-hidden className="size-4 animate-spin" />
+              {CTA_VERIFYING}
+            </div>
+          ) : null}
         </CardContent>
       </Card>
     );
