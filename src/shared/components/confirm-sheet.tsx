@@ -46,8 +46,9 @@ type ConfirmSheetProps = {
  * Right surface ONLY when the confirm is launched from a plain page or a
  * non-drawer trigger — nothing open behind it, so the mobile drawer presents
  * cleanly with no Vaul stacking/body-lock problem. When the trigger lives
- * inside an open bottom sheet, use `ConfirmAlert` instead. `Abbrechen` is the
- * safe default; the destructive action is the one visually-distinct button.
+ * inside an open bottom sheet, inline the confirm in that sheet instead (a
+ * second stacked drawer does not present reliably). `Abbrechen` is the safe
+ * default; the destructive action is the one visually-distinct button.
  */
 export function ConfirmSheet({
   open,

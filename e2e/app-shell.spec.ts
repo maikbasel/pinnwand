@@ -6,7 +6,6 @@ import {
   BOARDS_NAV_LABEL,
   BRAND_NAME,
   CREATE_BOARD_RAIL_LABEL,
-  SIGN_OUT_LABEL,
 } from "@/features/navigation/lib/copy";
 import { test } from "./fixtures";
 import { adminClient, createAuthenticatedUser } from "./helpers/direct-auth";
@@ -36,7 +35,9 @@ function accountMenuTrigger(page: Page): Locator {
 
 async function signOut(page: Page): Promise<void> {
   await accountMenuTrigger(page).click();
-  await page.getByRole("button", { name: SIGN_OUT_LABEL }).click();
+  // The sign-out row is a Base UI menu item (role="menuitem"), not a button,
+  // so target its e2e testid rather than a button role.
+  await page.getByTestId("account-signout").click();
 }
 
 test.describe("desktop shell", () => {

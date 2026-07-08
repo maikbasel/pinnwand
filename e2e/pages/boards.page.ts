@@ -5,8 +5,6 @@ import {
   JOIN_BOARD_CTA,
 } from "@/features/boards/lib/copy";
 
-const SIGN_OUT_PATTERN = /abmelden/i;
-
 // The boards list, the authenticated landing surface: owned + joined boards,
 // the inline create entry, and the link to the join-by-code page.
 export class BoardsPage {
@@ -15,7 +13,6 @@ export class BoardsPage {
   readonly newBoardButton: Locator;
   readonly createBoardInput: Locator;
   readonly joinBoardLink: Locator;
-  readonly signOutButton: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -23,7 +20,6 @@ export class BoardsPage {
     this.newBoardButton = page.getByRole("button", { name: CREATE_BOARD_CTA });
     this.createBoardInput = page.getByLabel(CREATE_BOARD_CTA);
     this.joinBoardLink = page.getByRole("link", { name: JOIN_BOARD_CTA });
-    this.signOutButton = page.getByRole("button", { name: SIGN_OUT_PATTERN });
   }
 
   async goto(): Promise<void> {

@@ -58,9 +58,9 @@ function EmptyMedia({
   );
 }
 
-function EmptyTitle({ className, ...props }: ComponentProps<"div">) {
+function EmptyTitle({ className, ...props }: ComponentProps<"h2">) {
   return (
-    <div
+    <h2
       className={cn("font-medium text-lg tracking-tight", className)}
       data-slot="empty-title"
       {...props}
