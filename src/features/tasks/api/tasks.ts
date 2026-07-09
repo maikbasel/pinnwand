@@ -230,44 +230,19 @@ const SetAssigneesInput = z.object({
   userIds: z.array(z.uuid()),
 });
 
+// Replaces the task's assignees with the given set in one atomic transaction via
+// the `set_task_assignees` RPC (diff done server-side). A partial write can no
+// longer leave a half-applied set, and concurrent edits can't interleave the way
+// a client-side read-then-insert-then-delete could.
 export async function setTaskAssignees(
   input: z.input<typeof SetAssigneesInput>
 ): Promise<void> {
   const parsed = SetAssigneesInput.parse(input);
-  const { data: current, error: readError } = await supabase
-    .from("task_assignees")
-    .select("user_id")
-    .eq("task_id", parsed.taskId);
-  if (readError) {
-    throw readError;
-  }
-  const existing = new Set(
-    z
-      .array(AssigneeRowSchema)
-      .parse(current)
-      .map((r) => r.user_id)
-  );
-  const next = new Set(parsed.userIds);
-  const toInsert = parsed.userIds.filter((id) => !existing.has(id));
-  const toDelete = [...existing].filter((id) => !next.has(id));
-  if (toInsert.length > 0) {
-    const { error } = await supabase
-      .from("task_assignees")
-      .insert(
-        toInsert.map((userId) => ({ task_id: parsed.taskId, user_id: userId }))
-      );
-    if (error) {
-      throw error;
-    }
-  }
-  if (toDelete.length > 0) {
-    const { error } = await supabase
-      .from("task_assignees")
-      .delete()
-      .eq("task_id", parsed.taskId)
-      .in("user_id", toDelete);
-    if (error) {
-      throw error;
-    }
+  const { error } = await supabase.rpc("set_task_assignees", {
+    p_task: parsed.taskId,
+    p_user_ids: parsed.userIds,
+  });
+  if (error) {
+    throw error;
   }
 }

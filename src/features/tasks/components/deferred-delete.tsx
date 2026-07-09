@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -69,7 +70,9 @@ export function DeferredDeleteProvider({
       setPending((cur) => new Set(cur).add(task.id));
       const timer = setTimeout(() => {
         timers.current.delete(task.id);
-        deleteTask.mutate(
+        // Read the latest mutation off the ref, not the closed-over value, so
+        // this callback can stay referentially stable (empty-ish deps below).
+        deleteRef.current.mutate(
           { taskId: task.id },
           { onSettled: () => drop(task.id) }
         );
@@ -104,7 +107,7 @@ export function DeferredDeleteProvider({
         { duration: UNDO_WINDOW_MS, position: "bottom-center" }
       );
     },
-    [deleteTask, drop, clear]
+    [drop, clear]
   );
 
   useEffect(() => {
@@ -121,10 +124,15 @@ export function DeferredDeleteProvider({
     };
   }, []);
 
+  // `requestDelete` is referentially stable, so the context value only changes
+  // when the pending set does — consumers don't re-render on every provider render.
+  const value = useMemo<DeferredDeleteApi>(
+    () => ({ requestDelete, pendingDeleteIds: pending }),
+    [requestDelete, pending]
+  );
+
   return (
-    <DeferredDeleteContext.Provider
-      value={{ requestDelete, pendingDeleteIds: pending }}
-    >
+    <DeferredDeleteContext.Provider value={value}>
       {children}
     </DeferredDeleteContext.Provider>
   );

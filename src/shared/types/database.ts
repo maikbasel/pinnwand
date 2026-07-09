@@ -212,6 +212,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      set_task_assignees: {
+        Args: { p_task: string; p_user_ids: string[] }
+        Returns: undefined
+      }
     }
     Enums: {
       board_role: "owner" | "member"

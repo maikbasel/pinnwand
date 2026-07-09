@@ -203,4 +203,72 @@ describe("tasks RLS", () => {
       )
     ).rejects.toThrow();
   });
+
+  it("atomically replaces a task's assignees in the given set (member)", async () => {
+    const owner = await createAuthUser(`setass-owner-${Date.now()}@test.local`);
+    const member = await createAuthUser(`setass-mem-${Date.now()}@test.local`);
+    const { id: boardId, joinCode } = await createBoard(owner, "Assignees");
+    await joinBoard(member, joinCode);
+    const taskId = await insertTask(owner, boardId, owner);
+
+    // Seed with the owner, then replace the whole set with just the member: the
+    // owner must be removed and the member added in one call.
+    await withRls(
+      owner,
+      (sql) => sql /* sql */`
+        select public.set_task_assignees(${taskId}::uuid, ${[owner]}::uuid[])
+      `
+    );
+    await withRls(
+      owner,
+      (sql) => sql /* sql */`
+        select public.set_task_assignees(${taskId}::uuid, ${[member]}::uuid[])
+      `
+    );
+
+    const rows = await withRls(
+      owner,
+      (sql) =>
+        sql<{ user_id: string }[]> /* sql */`
+        select user_id from public.task_assignees where task_id = ${taskId}
+      `
+    );
+    expect(rows.map((r) => r.user_id)).toEqual([member]);
+
+    // An empty set clears every assignee.
+    await withRls(
+      owner,
+      (sql) => sql /* sql */`
+        select public.set_task_assignees(${taskId}::uuid, ${[]}::uuid[])
+      `
+    );
+    const cleared = await withRls(
+      owner,
+      (sql) =>
+        sql<{ user_id: string }[]> /* sql */`
+        select user_id from public.task_assignees where task_id = ${taskId}
+      `
+    );
+    expect(cleared).toEqual([]);
+  });
+
+  it("blocks a non-member from setting a task's assignees", async () => {
+    const owner = await createAuthUser(
+      `setass2-owner-${Date.now()}@test.local`
+    );
+    const outsider = await createAuthUser(
+      `setass2-out-${Date.now()}@test.local`
+    );
+    const { id: boardId } = await createBoard(owner, "Guarded assignees");
+    const taskId = await insertTask(owner, boardId, owner);
+
+    await expect(
+      withRls(
+        outsider,
+        (sql) => sql /* sql */`
+          select public.set_task_assignees(${taskId}::uuid, ${[outsider]}::uuid[])
+        `
+      )
+    ).rejects.toThrow();
+  });
 });
