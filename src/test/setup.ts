@@ -34,6 +34,16 @@ if (typeof globalThis.ResizeObserver === "undefined") {
   globalThis.ResizeObserver = ResizeObserverStub;
 }
 
+// jsdom does not implement the Pointer Capture API. sonner's toast action
+// button calls setPointerCapture on pointerdown; without these stubs, clicking
+// an Undo action throws an unhandled error that fails the run. No-op them —
+// jsdom has no real pointer to capture.
+if (typeof Element !== "undefined" && !Element.prototype.setPointerCapture) {
+  Element.prototype.setPointerCapture = () => undefined;
+  Element.prototype.releasePointerCapture = () => undefined;
+  Element.prototype.hasPointerCapture = () => false;
+}
+
 // jsdom does not implement matchMedia. The sidebar (useIsMobile) and the
 // responsive confirm surfaces (useMediaQuery) read it on mount; without a stub
 // any test that renders them throws. Default to the desktop viewport (no match).

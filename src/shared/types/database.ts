@@ -36,6 +36,13 @@ export type Database = {
             referencedRelation: "boards"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "fk_board_members_profiles"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
         ]
       }
       boards: {
@@ -197,6 +204,18 @@ export type Database = {
         }
       }
       regenerate_join_code: { Args: { p_board: string }; Returns: string }
+      renormalize_column_positions: {
+        Args: {
+          p_board: string
+          p_column: Database["public"]["Enums"]["task_column"]
+          p_ordered_ids: string[]
+        }
+        Returns: undefined
+      }
+      set_task_assignees: {
+        Args: { p_task: string; p_user_ids: string[] }
+        Returns: undefined
+      }
     }
     Enums: {
       board_role: "owner" | "member"

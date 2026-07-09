@@ -34,10 +34,9 @@ test("a user creates a board, shares its code, and a second user joins it", asyn
     await boardsPage.goto();
     await expect(boardsPage.boardEntry(boardName)).toBeVisible();
 
-    // 2. Opening the board shows its share code.
+    // 2. Opening the board and its actions menu reveals the share code.
     await boardsPage.boardEntry(boardName).click();
     await expect(boardDetailPage.heading(boardName)).toBeVisible();
-    await expect(boardDetailPage.shareHeading).toBeVisible();
     const joinCode = await boardDetailPage.getShareCode();
     expect(joinCode).toMatch(SHARE_CODE_PATTERN);
 

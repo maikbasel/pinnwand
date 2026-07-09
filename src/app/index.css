@@ -173,6 +173,17 @@ body {
   }
 }
 
+/* Chromeless scroll containers (the board's column strip and each column's
+   card list). Trello-style: the surface still scrolls, but no scrollbar is
+   painted. iOS hides scrollbars natively anyway (see pwa-design.md); this
+   matches that on desktop and Android. */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /* Pinnwand brand mark. The `default` variant carries fixed brand colours
    regardless of light/dark — a logo identity, not a UI token. The contextual
    variants (`mono`, `ghost`, `inverted`) bind to live theme tokens so they

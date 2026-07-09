@@ -18,3 +18,8 @@ export const TASK_PRIORITIES = [
 ] as const;
 
 export type TaskPriorityId = (typeof TASK_PRIORITIES)[number]["id"];
+
+// Priority a quick-add card starts with. Full edit (priority/due/assignees)
+// happens later in the task detail sheet; the inline composer only takes a
+// title, so it needs a sensible default.
+export const DEFAULT_TASK_PRIORITY: TaskPriorityId = "mittel";

@@ -2,7 +2,11 @@ import { render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BoardMembership } from "@/features/boards";
-import { BACK_TO_BOARDS_LABEL, BRAND_NAME } from "../../lib/copy";
+import {
+  ACCOUNT_LABEL,
+  BACK_TO_BOARDS_LABEL,
+  BRAND_NAME,
+} from "../../lib/copy";
 
 type MockLinkProps = {
   to: string;
@@ -25,7 +29,10 @@ vi.mock("@/features/navigation/lib/destinations", () => ({
 }));
 
 const useMyBoards = vi.hoisted(() => vi.fn());
-vi.mock("@/features/boards", () => ({ useMyBoards }));
+vi.mock("@/features/boards", () => ({
+  BoardActionsMenu: () => null,
+  useMyBoards,
+}));
 
 const useSignOut = vi.hoisted(() =>
   vi.fn(() => ({ isPending: false, mutate: vi.fn() }))
@@ -66,10 +73,13 @@ describe("TopAppBar", () => {
     });
   });
 
-  it("shows the brand name and no back link on the list root", () => {
+  it("shows the brand name, the account menu, and no back link on the list root", () => {
     render(<TopAppBar />);
 
     expect(screen.getByText(BRAND_NAME)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: ACCOUNT_LABEL })
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: BACK_TO_BOARDS_LABEL })
     ).not.toBeInTheDocument();
@@ -83,5 +93,15 @@ describe("TopAppBar", () => {
     expect(screen.getByText("Team-Board")).toBeInTheDocument();
     const backLink = screen.getByRole("link", { name: BACK_TO_BOARDS_LABEL });
     expect(backLink).toHaveAttribute("href", "/");
+  });
+
+  it("hides the account menu on a board route (scope by depth)", () => {
+    useActiveBoardId.mockReturnValue("board-1");
+
+    render(<TopAppBar />);
+
+    expect(
+      screen.queryByRole("button", { name: ACCOUNT_LABEL })
+    ).not.toBeInTheDocument();
   });
 });

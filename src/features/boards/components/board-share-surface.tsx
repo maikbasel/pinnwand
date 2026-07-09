@@ -1,14 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { ConfirmSheet } from "@/shared/components/confirm-sheet";
+import { ResponsiveDialog } from "@/shared/components/responsive-dialog";
 import { Alert, AlertDescription } from "@/shared/components/ui/alert";
 import { Button } from "@/shared/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/shared/components/ui/card";
 import { useRegenerateJoinCode } from "../hooks/use-regenerate-join-code";
 import {
   COPY_CODE_BUTTON,
@@ -41,6 +35,7 @@ function RotateCodeControl({ boardId }: { boardId: string }) {
   return (
     <>
       <Button
+        className="w-full"
         onClick={() => setConfirming(true)}
         type="button"
         variant="outline"
@@ -59,12 +54,25 @@ function RotateCodeControl({ boardId }: { boardId: string }) {
   );
 }
 
-type BoardSharePanelProps = {
+type BoardShareSurfaceProps = {
   board: Board;
   isOwner: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 };
 
-export function BoardSharePanel({ board, isOwner }: BoardSharePanelProps) {
+/**
+ * The join-code sharing surface, presented as a responsive Dialog/Drawer from
+ * the board actions menu (no longer inline on the board canvas, so the board
+ * fills the page). Shows the code, a copy button, and — for owners — a
+ * confirm-gated rotate control.
+ */
+export function BoardShareSurface({
+  board,
+  isOwner,
+  open,
+  onOpenChange,
+}: BoardShareSurfaceProps) {
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
   const copiedTimeoutRef = useRef<number | undefined>(undefined);
@@ -92,16 +100,25 @@ export function BoardSharePanel({ board, isOwner }: BoardSharePanelProps) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{SHARE_PANEL_HEADING}</CardTitle>
-        <CardDescription>{SHARE_CODE_HINT}</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <p className="text-center font-mono text-3xl tracking-[0.3em]">
+    <ResponsiveDialog
+      description={SHARE_CODE_HINT}
+      onOpenChange={onOpenChange}
+      open={open}
+      title={SHARE_PANEL_HEADING}
+    >
+      <div className="flex flex-col gap-4">
+        <p
+          className="text-center font-mono text-3xl tracking-[0.3em]"
+          data-testid="board-share-code"
+        >
           {board.joinCode}
         </p>
-        <Button onClick={copyCode} type="button" variant="outline">
+        <Button
+          className="w-full"
+          onClick={copyCode}
+          type="button"
+          variant="outline"
+        >
           {copied ? COPY_CODE_COPIED : COPY_CODE_BUTTON}
         </Button>
         {copyFailed ? (
@@ -110,7 +127,7 @@ export function BoardSharePanel({ board, isOwner }: BoardSharePanelProps) {
           </Alert>
         ) : null}
         {isOwner ? <RotateCodeControl boardId={board.id} /> : null}
-      </CardContent>
-    </Card>
+      </div>
+    </ResponsiveDialog>
   );
 }
