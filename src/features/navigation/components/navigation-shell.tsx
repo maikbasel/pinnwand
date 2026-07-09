@@ -13,7 +13,10 @@ export function NavigationShell({ children }: { children: ReactNode }) {
       <SidebarRail />
       <SidebarInset>
         <TopAppBar />
-        <div className="flex min-w-0 flex-1 flex-col">{children}</div>
+        {/* min-h-0 lets a page opt into filling the viewport with internal
+            scroll (the board). Page-scroll routes keep growing past it because
+            their own root has an auto min-height. */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
       </SidebarInset>
     </SidebarProvider>
   );

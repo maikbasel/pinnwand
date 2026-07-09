@@ -18,6 +18,10 @@ export const TRANSPORT_ERROR =
   "Verbindung fehlgeschlagen. Prüfe dein Netz und versuche es erneut.";
 
 export const RENAME_LABEL = "Umbenennen";
+export const RENAME_BOARD_TITLE = "Pinnwand umbenennen";
+export const RENAME_BOARD_SAVE = "Speichern";
+
+export const BOARD_ACTIONS_LABEL = "Aktionen";
 
 export const SHARE_PANEL_HEADING = "Teilen";
 export const SHARE_CODE_HINT =
@@ -45,7 +49,6 @@ export const ROLE_LABELS = {
   member: "Mitglied",
 } as const;
 
-export const TASKS_PLACEHOLDER = "Aufgaben folgen in Kürze.";
 export const BOARD_NOT_FOUND = "Diese Pinnwand wurde nicht gefunden.";
 
 export const BACK_LABEL = "Zurück";

@@ -4,6 +4,7 @@ import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { seedSessionFromStorage } from "@/features/auth";
+import { registerTaskMutationDefaults } from "@/features/tasks";
 import {
   cacheBuster,
   createIdbPersister,
@@ -27,11 +28,11 @@ if (typeof navigator !== "undefined") {
   onlineManager.setOnline(navigator.onLine);
 }
 
-// NOTE: each offline-first feature registers its resumable mutation defaults
-// here (via queryClient.setMutationDefaults) BEFORE the persister resumes a
-// write queued in a prior offline session. A resumed mutation has no React
-// hook to supply its mutationFn. The `tasks` slice will add
-// `registerTaskMutationDefaults(queryClient)` at this point.
+// Each offline-first feature registers its resumable mutation defaults here
+// (via queryClient.setMutationDefaults) BEFORE the persister resumes a write
+// queued in a prior offline session. A resumed mutation has no React hook to
+// supply its mutationFn; the registered default provides it.
+registerTaskMutationDefaults(queryClient);
 
 // Prime the session cache synchronously from Supabase's stored blob so the
 // route guard resolves a returning user on a cold (possibly offline) boot

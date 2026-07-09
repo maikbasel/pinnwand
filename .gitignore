@@ -13,6 +13,9 @@ dist-ssr
 supabase/.branches
 supabase/.temp
 
+# git worktrees
+.claude/worktrees/
+
 # editor / os
 .DS_Store
 *.log

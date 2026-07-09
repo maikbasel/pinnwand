@@ -2,6 +2,7 @@
 // Public API of the `boards` feature. A Pinnwand (board): create, list (owned +
 // shared), rename, delete, and the join-code sharing surface.
 export { BOARD_KEYS } from "./api/boards";
+export { BoardActionsMenu } from "./components/board-actions-menu";
 export { BoardDetailPage } from "./components/board-detail-page";
 export { BoardEmptyPane } from "./components/board-empty-pane";
 export { BoardsPage } from "./components/boards-page";

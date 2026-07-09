@@ -7,3 +7,5 @@ export {
   type TaskColumnId,
   type TaskPriorityId,
 } from "./columns";
+export { BoardSurface } from "./components/board-surface";
+export { registerTaskMutationDefaults } from "./mutation-defaults";
