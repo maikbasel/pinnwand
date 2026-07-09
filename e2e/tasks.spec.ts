@@ -12,10 +12,6 @@ const SHARE_CODE_PATTERN = /^[A-Z2-9]{8}$/;
 const OFFEN = TASK_COLUMNS[0].label;
 const ERLEDIGT = TASK_COLUMNS[3].label;
 
-// Headroom for the member's realtime channel to finish subscribing before the
-// owner writes (no observable readiness signal exists to await instead).
-const SUBSCRIBE_SETTLE_MS = 4000;
-
 // This spec creates boards + tasks and mints its own users per test, so it must
 // not ride the shared authenticated storageState (see .claude/rules/playwright.md
 // "Specs that mutate board-scoped state must self-isolate").
@@ -115,10 +111,12 @@ test("realtime: a task one member adds appears for another", async ({
 
       // The board heading renders as soon as the board mounts, but the realtime
       // channel subscribes a beat later. An insert that lands before the
-      // SUBSCRIBED handshake is dropped with nothing to re-trigger it, so give
-      // the member's channel time to come up before the owner writes. There is
-      // no DOM signal for subscription readiness, hence the bounded settle.
-      await memberPage.waitForTimeout(SUBSCRIBE_SETTLE_MS);
+      // SUBSCRIBED handshake is dropped with nothing to re-trigger it, so wait
+      // for the member's channel to actually report subscribed before the owner
+      // writes — a real handshake signal, not a blind sleep.
+      await expect(memberBoardDetailPage.realtimeSubscribed).toBeVisible({
+        timeout: 20_000,
+      });
 
       // Owner adds a task; it must surface on the member's board without a
       // reload, driven by the realtime invalidation.

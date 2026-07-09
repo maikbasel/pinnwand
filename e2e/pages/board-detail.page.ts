@@ -82,6 +82,13 @@ export class BoardDetailPage {
       .filter({ hasText: title });
   }
 
+  // Resolves once this client's realtime channel has finished subscribing — a
+  // write on another client is only observed here after this is present. Lets a
+  // two-client test wait for a real handshake instead of a blind sleep.
+  get realtimeSubscribed(): Locator {
+    return this.page.locator('[data-realtime-status="subscribed"]');
+  }
+
   get deletedToast(): Locator {
     return this.page.getByText(TASK_DELETED_TOAST);
   }

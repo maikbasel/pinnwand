@@ -86,4 +86,17 @@ describe("deferred delete", () => {
     });
     expect(deleteTask).not.toHaveBeenCalled();
   });
+
+  it("flushes a still-pending delete on unmount instead of abandoning it", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const { unmount } = renderHarness();
+    await user.click(screen.getByRole("button", { name: "go" }));
+    expect(deleteTask).not.toHaveBeenCalled();
+    // Leave the board mid-window: the requested delete must still fire.
+    await act(async () => {
+      unmount();
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(deleteTask).toHaveBeenCalledWith({ taskId: "t" });
+  });
 });

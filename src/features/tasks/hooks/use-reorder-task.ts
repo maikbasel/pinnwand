@@ -17,13 +17,18 @@ export type ReorderTaskVars = {
 type ReorderMutation = ReorderTaskMutation | RenormalizeColumnMutation;
 type Ctx = { previous: Task[] | undefined };
 
+const EMPTY_HIDDEN: ReadonlySet<string> = new Set();
+
 function orderedColumn(
   tasks: Task[],
   column: TaskColumnId,
-  exceptId: string
+  exceptId: string,
+  hiddenIds: ReadonlySet<string>
 ): Task[] {
   return tasks
-    .filter((t) => t.column === column && t.id !== exceptId)
+    .filter(
+      (t) => t.column === column && t.id !== exceptId && !hiddenIds.has(t.id)
+    )
     .sort((a, b) => a.position - b.position);
 }
 
@@ -59,7 +64,14 @@ function applyOptimistic(tasks: Task[], vars: ReorderMutation): Task[] {
  * replays from its variables alone (resumable defaults in `mutation-defaults.ts`)
  * with no cache read.
  */
-export function useReorderTask(boardId: string) {
+export function useReorderTask(
+  boardId: string,
+  // Cards in their delete-undo window are hidden from the board, so the reorder
+  // index the caller computes is relative to the list without them. Exclude the
+  // same ids here so the resolved neighbours line up (a pending delete in the
+  // column must not shift a sibling's slot by one).
+  hiddenIds: ReadonlySet<string> = EMPTY_HIDDEN
+) {
   const queryClient = useQueryClient();
   const key = TASK_KEYS.byBoard(boardId);
 
@@ -85,7 +97,7 @@ export function useReorderTask(boardId: string) {
 
   const toResumable = (vars: ReorderTaskVars): ReorderMutation => {
     const tasks = queryClient.getQueryData<Task[]>(key) ?? [];
-    const siblings = orderedColumn(tasks, vars.column, vars.taskId);
+    const siblings = orderedColumn(tasks, vars.column, vars.taskId, hiddenIds);
     const prev = vars.toIndex > 0 ? (siblings[vars.toIndex - 1] ?? null) : null;
     const next =
       vars.toIndex < siblings.length ? (siblings[vars.toIndex] ?? null) : null;

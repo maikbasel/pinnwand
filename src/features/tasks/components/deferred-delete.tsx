@@ -27,9 +27,11 @@ const DeferredDeleteContext = createContext<DeferredDeleteApi | null>(null);
  * Board-scoped deferred delete. `requestDelete` hides the card immediately (via
  * `pendingDeleteIds`, which the board filters out) and opens a ~5s Undo
  * snackbar. If the window elapses untouched, the real optimistic DELETE fires;
- * if the user taps Undo, the timer is cancelled and the card reappears. Timers
- * are cleared on unmount so a pending delete never fires after the board is
- * gone.
+ * if the user taps Undo, the timer is cancelled and the card reappears. On
+ * unmount (leaving the board mid-window) the still-pending deletes are flushed
+ * rather than abandoned — the user explicitly asked to delete them, so honoring
+ * that beats silently resurrecting the cards. The DELETE is a durable, resumable
+ * mutation, so it completes (or replays) after the board is gone.
  */
 export function DeferredDeleteProvider({
   boardId,
@@ -39,6 +41,10 @@ export function DeferredDeleteProvider({
   children: ReactNode;
 }) {
   const deleteTask = useDeleteTask(boardId);
+  // The unmount flush runs from a `[]`-deps effect, so it would close over a
+  // stale `deleteTask`; a ref keeps the latest without re-subscribing the effect.
+  const deleteRef = useRef(deleteTask);
+  deleteRef.current = deleteTask;
   const [pending, setPending] = useState<Set<string>>(new Set());
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
@@ -104,8 +110,12 @@ export function DeferredDeleteProvider({
   useEffect(() => {
     const active = timers.current;
     return () => {
-      for (const timer of active.values()) {
+      // Flush: fire the DELETE the user already requested for each card still in
+      // its window, rather than letting the card silently reappear. No onSettled
+      // state update — the provider is unmounting.
+      for (const [taskId, timer] of active) {
         clearTimeout(timer);
+        deleteRef.current.mutate({ taskId });
       }
       active.clear();
     };

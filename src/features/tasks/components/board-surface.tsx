@@ -60,10 +60,16 @@ export function BoardSurface({ boardId }: { boardId: string }) {
 
 function BoardBoard({ boardId }: { boardId: string }) {
   const isRestoring = useIsRestoring();
-  useBoardRealtime(boardId);
+  const { subscribed } = useBoardRealtime(boardId);
   const { tasks, isPending, isError } = useBoardTasks(boardId);
   const { requestDelete, pendingDeleteIds } = useDeferredDelete();
-  const [openTask, setOpenTask] = useState<Task | null>(null);
+  // Hold the open card by id and resolve it from the live cache, so a realtime
+  // update flows through and a remote delete closes the sheet instead of
+  // leaving an edit surface over a task that no longer exists.
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  const openTask = openTaskId
+    ? (tasks.find((t) => t.id === openTaskId) ?? null)
+    : null;
   const [createColumn, setCreateColumn] = useState<TaskColumnId | null>(null);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   // A card in its undo window is hidden immediately: filter the pending ids out
@@ -81,7 +87,7 @@ function BoardBoard({ boardId }: { boardId: string }) {
   // the strip) stays with dnd-kit.
   const stripRef = useRef<HTMLDivElement>(null);
   useEdgeAutoScroll(stripRef, activeTask !== null);
-  const reorderTask = useReorderTask(boardId);
+  const reorderTask = useReorderTask(boardId, pendingDeleteIds);
   const moveTask = useMoveTask(boardId);
   const sensors = useSensors(
     // Mouse: a short drag distance so a click still opens the sheet.
@@ -126,10 +132,11 @@ function BoardBoard({ boardId }: { boardId: string }) {
       return;
     }
     const columnTasks = visibleByColumn[activeColumn];
-    const toIndex = columnTasks.findIndex((t) => t.id === over.id);
-    if (toIndex === -1) {
-      return;
-    }
+    const overIndex = columnTasks.findIndex((t) => t.id === over.id);
+    // -1 means the drop landed on the column body, not a card (below the last
+    // card, or an empty column): append to the bottom. `columnTasks` includes
+    // the dragged card, so the bottom index among its siblings is length - 1.
+    const toIndex = overIndex === -1 ? columnTasks.length - 1 : overIndex;
     reorderTask.mutate({
       taskId: String(active.id),
       column: activeColumn,
@@ -169,8 +176,13 @@ function BoardBoard({ boardId }: { boardId: string }) {
       sensors={sensors}
     >
       {/* Positioning context for the floating delete zone, which overlays the
-          top of the board without pushing the columns down. */}
-      <div className="relative flex min-h-0 flex-1 flex-col">
+          top of the board without pushing the columns down. `data-realtime-status`
+          reflects the live channel handshake (a second client only observes
+          writes once "subscribed"). */}
+      <div
+        className="relative flex min-h-0 flex-1 flex-col"
+        data-realtime-status={subscribed ? "subscribed" : "connecting"}
+      >
         {/* Only visible while a card is being dragged; dropping onto it routes
             the card through the deferred-delete flow. */}
         <DeleteDropZone active={activeTask !== null} />
@@ -187,7 +199,7 @@ function BoardBoard({ boardId }: { boardId: string }) {
               label={column.label}
               onAdd={setCreateColumn}
               onCloseAdd={() => setCreateColumn(null)}
-              onOpen={setOpenTask}
+              onOpen={(task) => setOpenTaskId(task.id)}
               tasks={visibleByColumn[column.id]}
             />
           ))}
@@ -199,10 +211,11 @@ function BoardBoard({ boardId }: { boardId: string }) {
       {openTask ? (
         <TaskDetailSheet
           boardId={boardId}
+          key={openTask.id}
           mode={{ kind: "edit", task: openTask }}
           onOpenChange={(next) => {
             if (!next) {
-              setOpenTask(null);
+              setOpenTaskId(null);
             }
           }}
           open
