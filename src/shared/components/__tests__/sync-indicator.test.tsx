@@ -1,4 +1,5 @@
 import {
+  onlineManager,
   QueryClient,
   QueryClientProvider,
   useQuery,
@@ -6,7 +7,11 @@ import {
 import { act, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SYNC_INDICATOR_LABEL, SyncIndicator } from "../sync-indicator";
+import {
+  OFFLINE_INDICATOR_LABEL,
+  SYNC_INDICATOR_LABEL,
+  SyncIndicator,
+} from "../sync-indicator";
 
 let client: QueryClient;
 
@@ -43,6 +48,8 @@ function DeferredProbe({ board }: { board: string }) {
 afterEach(() => {
   client.clear();
   settleProbe = null;
+  // Reset the manual online override so it never leaks into the next test.
+  onlineManager.setOnline(true);
 });
 
 describe("SyncIndicator", () => {
@@ -77,6 +84,24 @@ describe("SyncIndicator", () => {
     // fire, then confirm this board's indicator never appeared.
     await waitFor(() => expect(client.isFetching()).toBeGreaterThan(0));
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("shows the offline badge instead of the syncing label while offline", async () => {
+    client = new QueryClient();
+    onlineManager.setOnline(false);
+    render(
+      <>
+        {/* A paused write still counts as pending, but offline it must not read
+            as "syncing". */}
+        <Probe board="b" />
+        <SyncIndicator boardId="b" />
+      </>,
+      { wrapper }
+    );
+    expect(
+      await screen.findByText(OFFLINE_INDICATOR_LABEL)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(SYNC_INDICATOR_LABEL)).not.toBeInTheDocument();
   });
 
   it("holds the indicator on screen briefly after the work settles", async () => {
