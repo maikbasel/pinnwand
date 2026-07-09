@@ -6,6 +6,11 @@ paths:
 
 # dnd-kit (Drag and Drop)
 
+> **Resolved deviation (Pinnwand tasks board).** The Mahlzeit guidance below assumes a grip handle and a single `PointerSensor`. The tasks board diverges on two points, and both are deliberate:
+> - **The whole card is draggable, no grip handle.** A tap opens the task detail sheet; a long-press starts a drag. That tap-versus-long-press split disambiguates open-from-drag, so a separate handle would be redundant chrome.
+> - **Split `MouseSensor` (distance 8) + `TouchSensor` (delay 250, tolerance 5), not one `PointerSensor`.** A `PointerSensor` captures touch too, and its distance activation would pre-empt the touch long-press before the delay elapses — a drag would start on any small finger movement and the card could never be tapped to open. Splitting the sensors lets mouse activate on distance while touch waits out the long-press.
+> - The `KeyboardSensor` is still required (accessibility), exactly as below.
+
 ## Sensors
 
 - Touch + pointer + keyboard sensors are all required. Configure them at the `DndContext` provider level in the feature that owns the drag surface.

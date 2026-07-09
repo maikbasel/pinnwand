@@ -47,7 +47,7 @@ In standalone mode the user has no browser back button. The app must provide its
 
 ## Offline affordances
 
-- Offline state is a first-class UI state. The `OfflineIndicator` (`src/shared/components/offline-indicator.tsx`, driven by `useOnlineStatus`) shows a persistent badge while offline; the bottom-right `SyncIndicator` yields to it. See `pwa.md` for the offline-first data model behind it.
+- Offline state is a first-class UI state. The bottom-right `SyncIndicator` (`src/shared/components/sync-indicator.tsx`) owns it: offline takes precedence, so it shows a persistent "Offline" badge instead of the "Synchronisiert…" spinner (a paused write still counts as pending, so a spinner offline would mislead). It reads the shared TanStack Query `onlineManager` via `useSyncExternalStore`, not a separate `useOnlineStatus` hook. See `pwa.md` for the offline-first data model behind it.
 - Mutations queued while offline must look submitted optimistically (per `production-grade.md`) — never disable inputs on offline alone. Meal writes persist and resume on reconnect; the realtime channel reconnects and reconciles.
 - Core meal planning renders offline from the persisted cache (`pwa.md`). There is no static offline fallback page — the precached SPA shell is the offline UX.
 

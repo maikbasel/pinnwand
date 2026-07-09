@@ -11,8 +11,7 @@ paths:
 
 ## Service worker
 
-- `vite-plugin-pwa` builds the manifest and service worker via the **`injectManifest`** strategy: the worker source is `src/sw.ts`, which the plugin compiles and injects the precache manifest into (`self.__WB_MANIFEST`). Configure precaching/runtime caching with Workbox modules *inside* `src/sw.ts`.
-- **Resolved deviation (was: "don't write a custom service worker").** The project ran `generateSW` until Web Push landed (`add-household-notifications`). Push needs `push` + `notificationclick` listeners in the worker, which a generated worker cannot carry, so it migrated to `injectManifest`. `src/sw.ts` ports the prior offline behaviour verbatim — `precacheAndRoute(self.__WB_MANIFEST)`, `cleanupOutdatedCaches()`, and a `NavigationRoute` to `index.html` with the `/auth/ /rest/ /realtime/` denylist — then adds the push handlers. Do not regress to `generateSW`: it would silently drop push. The worker is typed by a dedicated `tsconfig.worker.json` (WebWorker lib); `src/sw.ts` is excluded from `tsconfig.app.json`.
+- `vite-plugin-pwa` builds the manifest and service worker via its default **`generateSW`** strategy — Workbox writes the worker at build time from the `VitePWA` config in `vite.config.ts`. There is no hand-written worker source and no `src/sw.ts`; Pinnwand has no Web Push, so the worker needs no custom `push`/`notificationclick` listeners. If a future feature needs listeners a generated worker cannot carry, switch to `injectManifest` with a `src/sw.ts` then — not before.
 - Use `registerType: 'autoUpdate'`; the worker calls `skipWaiting()` + `clientsClaim()` so a new build activates immediately. Show a "new version available" toast if the update is detected mid-session.
 - Workbox runtime caching is fine for static assets. **Do not cache Supabase responses** — staleness in a shared meal plan is worse than a brief offline blank.
 
