@@ -8,10 +8,14 @@ import type { Task } from "../../types";
 vi.mock("../../api/tasks", async () => {
   const actual =
     await vi.importActual<typeof import("../../api/tasks")>("../../api/tasks");
-  return { ...actual, reorderTask: vi.fn() };
+  return {
+    ...actual,
+    reorderTask: vi.fn(),
+    renormalizeColumnPositions: vi.fn(),
+  };
 });
 
-import { reorderTask } from "../../api/tasks";
+import { renormalizeColumnPositions, reorderTask } from "../../api/tasks";
 import { useReorderTask } from "../use-reorder-task";
 
 function task(id: string, position: number): Task {
@@ -59,8 +63,49 @@ describe("useReorderTask", () => {
       result.current.mutate({ taskId: "c", column: "offen", toIndex: 0 });
     });
     await waitFor(() =>
-      expect(reorderTask).toHaveBeenCalledWith({ taskId: "c", position: 512 })
+      expect(reorderTask).toHaveBeenCalledWith({
+        op: "reorder",
+        taskId: "c",
+        position: 512,
+      })
     );
+  });
+
+  it("renumbers the whole column when the target gap is exhausted", async () => {
+    const client = new QueryClient({
+      defaultOptions: { mutations: { retry: false } },
+    });
+    // `a` and `b` are adjacent doubles: there is no representable midpoint
+    // between them, so a single-row reorder cannot place `c` between them.
+    const a = task("a", 1);
+    const b = task("b", 1 + Number.EPSILON);
+    client.setQueryData(TASK_KEYS.byBoard("b"), [a, b, task("c", 3072)]);
+    vi.mocked(renormalizeColumnPositions).mockResolvedValue();
+    const { result } = renderHook(() => useReorderTask("b"), {
+      wrapper: wrapperFor(client),
+    });
+    // Drop `c` between `a` and `b`.
+    act(() => {
+      result.current.mutate({ taskId: "c", column: "offen", toIndex: 1 });
+    });
+
+    await waitFor(() =>
+      expect(renormalizeColumnPositions).toHaveBeenCalledWith({
+        op: "renormalizeColumn",
+        boardId: "b",
+        column: "offen",
+        orderedIds: ["a", "c", "b"],
+      })
+    );
+    // The single-row path must not be taken for an exhausted gap.
+    expect(reorderTask).not.toHaveBeenCalled();
+    // The optimistic cache already shows the final order, clean-spaced.
+    const cached = client.getQueryData<Task[]>(TASK_KEYS.byBoard("b")) ?? [];
+    const order = [...cached]
+      .sort((x, y) => x.position - y.position)
+      .map((t) => t.id);
+    expect(order).toEqual(["a", "c", "b"]);
+    expect(cached.find((t) => t.id === "c")?.position).toBe(2048);
   });
 
   it("rolls the cache back when the reorder fails", async () => {

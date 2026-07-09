@@ -3,6 +3,7 @@ import {
   createTask,
   deleteTask,
   moveTask,
+  renormalizeColumnPositions,
   reorderTask,
   setTaskAssignees,
   TASK_MUTATION_KEYS,
@@ -50,6 +51,16 @@ export type ReorderTaskMutation = {
   position: number;
 };
 
+// The fallback for an exhausted fractional-index gap: the full desired order of
+// a column's task ids, renumbered server-side to clean 1024-spacing in one
+// write. Self-contained (board, column, ids) so it replays offline like the rest.
+export type RenormalizeColumnMutation = {
+  op: "renormalizeColumn";
+  boardId: string;
+  column: TaskColumnId;
+  orderedIds: string[];
+};
+
 export type DeleteTaskMutation = { op: "delete"; taskId: string };
 
 export type SetAssigneesMutation = {
@@ -63,6 +74,7 @@ export type ResumableTaskMutation =
   | UpdateTaskMutation
   | MoveTaskMutation
   | ReorderTaskMutation
+  | RenormalizeColumnMutation
   | DeleteTaskMutation
   | SetAssigneesMutation;
 
@@ -79,6 +91,9 @@ export async function runResumableTaskMutation(
       return moveTask(vars);
     case "reorder":
       return reorderTask(vars);
+    case "renormalizeColumn":
+      await renormalizeColumnPositions(vars);
+      return;
     case "delete":
       await deleteTask(vars);
       return;

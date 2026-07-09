@@ -129,4 +129,78 @@ describe("tasks RLS", () => {
 
     await expect(insertTask(outsider, boardId, outsider)).rejects.toThrow();
   });
+
+  it("renumbers a column to clean spacing in the given order (member)", async () => {
+    const owner = await createAuthUser(`renorm-owner-${Date.now()}@test.local`);
+    const { id: boardId } = await createBoard(owner, "Renorm");
+    const inserted = await withRls(
+      owner,
+      (sql) =>
+        sql<{ id: string }[]> /* sql */`
+        insert into public.tasks (board_id, "column", title, priority, position, created_by)
+        values
+          (${boardId}, 'offen', 'A', 'mittel', 1, ${owner}),
+          (${boardId}, 'offen', 'B', 'mittel', 2, ${owner}),
+          (${boardId}, 'offen', 'C', 'mittel', 3, ${owner})
+        returning id
+      `
+    );
+    const ids = inserted.map((r) => r.id);
+    expect(ids).toHaveLength(3);
+    const [a, b, c] = ids;
+    // Desired order C, A, B (`?? ""` only narrows the type; the length assertion
+    // above guarantees the ids are present).
+    const desiredOrder = [c, a, b].map((id) => id ?? "");
+
+    await withRls(
+      owner,
+      (sql) => sql /* sql */`
+        select public.renormalize_column_positions(
+          ${boardId}::uuid, 'offen'::public.task_column, ${desiredOrder}::uuid[]
+        )
+      `
+    );
+
+    const rows = await withRls(
+      owner,
+      (sql) =>
+        sql<{ id: string; position: number }[]> /* sql */`
+        select id, position from public.tasks
+        where board_id = ${boardId} and "column" = 'offen'
+        order by position
+      `
+    );
+    expect(rows.map((r) => r.id)).toEqual(desiredOrder);
+    expect(rows.map((r) => Number(r.position))).toEqual([1024, 2048, 3072]);
+  });
+
+  it("blocks a non-member from renumbering a board's column", async () => {
+    const owner = await createAuthUser(
+      `renorm2-owner-${Date.now()}@test.local`
+    );
+    const outsider = await createAuthUser(
+      `renorm2-out-${Date.now()}@test.local`
+    );
+    const { id: boardId } = await createBoard(owner, "Guarded");
+    const [task] = await withRls(
+      owner,
+      (sql) =>
+        sql<{ id: string }[]> /* sql */`
+        insert into public.tasks (board_id, "column", title, priority, position, created_by)
+        values (${boardId}, 'offen', 'A', 'mittel', 1024, ${owner})
+        returning id
+      `
+    );
+
+    await expect(
+      withRls(
+        outsider,
+        (sql) => sql /* sql */`
+          select public.renormalize_column_positions(
+            ${boardId}::uuid, 'offen'::public.task_column, ${[task?.id ?? ""]}::uuid[]
+          )
+        `
+      )
+    ).rejects.toThrow();
+  });
 });

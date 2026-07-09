@@ -204,6 +204,14 @@ export type Database = {
         }
       }
       regenerate_join_code: { Args: { p_board: string }; Returns: string }
+      renormalize_column_positions: {
+        Args: {
+          p_board: string
+          p_column: Database["public"]["Enums"]["task_column"]
+          p_ordered_ids: string[]
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       board_role: "owner" | "member"

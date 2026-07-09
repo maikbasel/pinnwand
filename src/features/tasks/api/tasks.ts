@@ -186,6 +186,30 @@ export async function reorderTask(
   return toTask(TaskRowSchema.parse(data));
 }
 
+const RenormalizeColumnInput = z.object({
+  boardId: z.uuid(),
+  column: TaskColumnSchema,
+  orderedIds: z.array(z.uuid()),
+});
+
+// Atomically renumbers a column to clean 1024-spacing in the given order via the
+// `renormalize_column_positions` RPC. Used only when a single-row reorder can no
+// longer place a card (the fractional-index gap between two neighbours is
+// exhausted); the whole-column rewrite cannot be expressed as a per-row update.
+export async function renormalizeColumnPositions(
+  input: z.input<typeof RenormalizeColumnInput>
+): Promise<void> {
+  const parsed = RenormalizeColumnInput.parse(input);
+  const { error } = await supabase.rpc("renormalize_column_positions", {
+    p_board: parsed.boardId,
+    p_column: parsed.column,
+    p_ordered_ids: parsed.orderedIds,
+  });
+  if (error) {
+    throw error;
+  }
+}
+
 const DeleteTaskInput = z.object({ taskId: z.uuid() });
 
 export async function deleteTask(
