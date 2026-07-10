@@ -28,5 +28,5 @@ coverage
 dev-dist
 playwright-report
 test-results
-e2e/.auth
+**/e2e/.auth
 *.tsbuildinfo

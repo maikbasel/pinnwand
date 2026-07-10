@@ -1,0 +1,11 @@
+{
+  "name": "@pinnwand/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./database": "./src/database.ts",
+    "./columns": "./src/columns.ts"
+  }
+}

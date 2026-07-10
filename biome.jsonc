@@ -11,8 +11,8 @@
       "!**/node_modules",
       "!**/dev-dist",
       "!**/coverage",
-      "!src/app/routeTree.gen.ts",
-      "!src/shared/types/database.ts",
+      "!apps/web/src/app/routeTree.gen.ts",
+      "!packages/contracts/src/database.ts",
       "!.claude"
     ]
   },
