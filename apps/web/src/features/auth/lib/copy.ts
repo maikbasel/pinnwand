@@ -28,3 +28,16 @@ export const CALLBACK_ERROR_TIMEOUT =
   "Das dauert länger als gewohnt. Der Link ist womöglich abgelaufen oder wurde auf einem anderen Gerät angefragt. Gib stattdessen den Code aus der E-Mail auf der Anmeldeseite ein.";
 export const BACK_TO_SIGN_IN = "Zurück zur Anmeldung";
 export const SIGN_OUT = "Abmelden";
+
+export const CONSENT_HEADING = "Zugriff gewähren";
+export function consentDescription(clientName: string): string {
+  return `${clientName} möchte auf dein Pinnwand-Konto zugreifen.`;
+}
+export const CONSENT_SCOPE_LABEL = "Angeforderter Bereich";
+export const CTA_APPROVE = "Zugriff erlauben";
+export const CTA_DENY = "Ablehnen";
+export const CTA_SUBMITTING = "Wird bestätigt …";
+export const CONSENT_LOAD_ERROR =
+  "Die Anfrage konnte nicht geladen werden. Der Link ist möglicherweise abgelaufen.";
+export const CONSENT_SUBMIT_ERROR =
+  "Aktion fehlgeschlagen. Versuche es erneut.";

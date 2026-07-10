@@ -1,9 +1,14 @@
 // biome-ignore-all lint/performance/noBarrelFile: feature public surface per .claude/rules/architecture.md
 export { AUTH_KEYS, subscribeToAuthChanges } from "./api/auth";
 export { AuthSync } from "./components/auth-sync";
+export { OAuthConsent } from "./components/oauth-consent";
 export { SignInForm } from "./components/sign-in-form";
 export { SignOutButton } from "./components/sign-out-button";
 export { requireAuth, requireGuest, seedSessionFromStorage } from "./guards";
+export {
+  useAuthorizationDetails,
+  useSubmitConsent,
+} from "./hooks/use-oauth-consent";
 export { useSession } from "./hooks/use-session";
 export { useSignIn } from "./hooks/use-sign-in";
 export { useSignOut } from "./hooks/use-sign-out";

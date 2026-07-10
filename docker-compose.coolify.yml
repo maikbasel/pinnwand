@@ -84,6 +84,9 @@ services:
       GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
       GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/v1/verify
       GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /auth/v1/verify
+      GOTRUE_OAUTH_SERVER_ENABLED: "true"
+      GOTRUE_OAUTH_SERVER_ALLOW_DYNAMIC_REGISTRATION: "true"
+      GOTRUE_OAUTH_SERVER_AUTHORIZATION_PATH: /oauth/consent
       # Rate limits, prod only. Local dev (docker-compose.yml) and the sealed
       # e2e stack (docker-compose.e2e.yml) run with GoTrue's defaults so test
       # suites and rapid iteration aren't gated. Setting RATE_LIMIT_HEADER
@@ -229,6 +232,38 @@ services:
       - "8080"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  mcp:
+    # MCP connector server (apps/mcp): its own Coolify app on its own
+    # subdomain, so ChatGPT/Claude connectors hit a URL separate from `web`.
+    # It never sees the service role key — only the anon key, same as `web` —
+    # and acts as the connecting user via a per-request user-scoped Supabase
+    # client (the user's own JWT), so RLS is the only authorization boundary.
+    build:
+      context: .
+      dockerfile: apps/mcp/Dockerfile
+      target: runtime
+    restart: unless-stopped
+    depends_on:
+      kong: { condition: service_started }
+    environment:
+      # The public Kong gateway URL, same value as web's VITE_SUPABASE_URL.
+      SUPABASE_URL: ${API_EXTERNAL_URL:?API_EXTERNAL_URL must be set}
+      SUPABASE_ANON_KEY: ${ANON_KEY:?ANON_KEY must be set}
+      # Shared HS256 secret self-hosted GoTrue signs user JWTs with, so the
+      # mcp server can verify tokens locally. NOT the service role key.
+      SUPABASE_JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      # Public URL of THIS service; set to the mcp Coolify domain. Used in
+      # OAuth protected-resource metadata and the WWW-Authenticate challenge.
+      MCP_PUBLIC_URL: ${MCP_PUBLIC_URL:?MCP_PUBLIC_URL must be set}
+    expose:
+      - "8787"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8787/health"]
       interval: 10s
       timeout: 3s
       retries: 3

@@ -70,21 +70,23 @@ SMTP_PORT
 SMTP_USER
 SMTP_PASS
 EMAIL_FROM
+MCP_PUBLIC_URL
 ```
 
-`SITE_URL` is the public web hostname (GoTrue uses it for the redirect allow-list and emits it in magic-link emails). `API_EXTERNAL_URL` is the public Kong hostname; it is baked into the frontend bundle as `VITE_SUPABASE_URL` at build time and is also read by Studio for browser-side calls. `SMTP_*` and `EMAIL_FROM` wire GoTrue to a real mail provider so magic-link and OTP emails deliver (there is no Mailpit in production).
+`SITE_URL` is the public web hostname (GoTrue uses it for the redirect allow-list and emits it in magic-link emails). `API_EXTERNAL_URL` is the public Kong hostname; it is baked into the frontend bundle as `VITE_SUPABASE_URL` at build time, read by Studio for browser-side calls, and reused as the `mcp` service's `SUPABASE_URL`. `SMTP_*` and `EMAIL_FROM` wire GoTrue to a real mail provider so magic-link and OTP emails deliver (there is no Mailpit in production). `MCP_PUBLIC_URL` is the public mcp hostname; see [MCP connector server](#mcp-connector-server-appsmcp) below.
 
 ## Domains and reverse proxy
 
-Coolify's built-in reverse proxy fronts three services on three hostnames. Each is configured in Coolify's per-service **"Domains for &lt;service&gt;"** field, not via env vars:
+Coolify's built-in reverse proxy fronts four services on four hostnames. Each is configured in Coolify's per-service **"Domains for &lt;service&gt;"** field, not via env vars:
 
 | Coolify "Domains for…" | Service       | Auth                                  |
-|------------------------|---------------|---------------------------------------|
+|------------------------|---------------|----------------------------------------|
 | `web`                  | `web:8080`    | App-level (magic-link / OTP sign-in)  |
 | `kong`                 | `kong:8000`   | Supabase API key + JWT                |
 | `studio`               | `studio:3000` | SSO/auth proxy upstream (see below)   |
+| `mcp`                  | `mcp:8787`    | OAuth 2.1 bearer token (see below)    |
 
-The `kong` hostname must also be set as `API_EXTERNAL_URL`. The `web` hostname must also be set as `SITE_URL`. The `studio` hostname needs only the Coolify domain field; no env var consumes it.
+The `kong` hostname must also be set as `API_EXTERNAL_URL`. The `web` hostname must also be set as `SITE_URL`. The `mcp` hostname must also be set as `MCP_PUBLIC_URL`. The `studio` hostname needs only the Coolify domain field; no env var consumes it.
 
 ## Studio access
 
@@ -120,19 +122,57 @@ You can still trigger a redeploy straight from the Coolify UI; the workflow is a
 ## First deploy checklist
 
 - [ ] Coolify resource created from `docker-compose.coolify.yml`.
-- [ ] All 13 required env vars set on the resource (see above).
+- [ ] All 14 required env vars set on the resource (see above).
 - [ ] The four secret groups generated with the documented commands, not reused from another project.
-- [ ] Three "Domains for…" entries filled (`web`, `kong`, `studio`).
+- [ ] Four "Domains for…" entries filled (`web`, `kong`, `studio`, `mcp`).
 - [ ] SSO/auth proxy pointing at the studio hostname with the operator policy attached.
-- [ ] DNS records configured for all three hostnames, with valid TLS certs in Coolify.
+- [ ] DNS records configured for all four hostnames, with valid TLS certs in Coolify.
 - [ ] GitHub `production` environment created with `COOLIFY_TOKEN` (secret) plus `COOLIFY_DOMAIN` and `COOLIFY_RESOURCE_UUID` (vars).
-- [ ] First deploy dispatched via Actions → Deploy to Coolify; verify `migrate` completed and `web`/`kong`/`studio` report healthy.
+- [ ] First deploy dispatched via Actions → Deploy to Coolify; verify `migrate` completed and `web`/`kong`/`studio`/`mcp` report healthy.
 - [ ] Visit the studio hostname from a clean browser: it must redirect to the SSO challenge, never straight to Studio.
 - [ ] Provision the first operator account (see below), then sign in from the web hostname.
+- [ ] Connect an MCP client (see below) and confirm `GET https://<mcp-domain>/health` returns `{"status":"ok"}`.
 
 ## Provisioning users
 
 Self-serve signup is disabled (`GOTRUE_DISABLE_SIGNUP=true`). Operators add users through Studio (Authentication → Users → Add user) or the GoTrue admin API. Set the person's display name on their `public.profiles` row (Database → `public.profiles`); it is the single source of truth for identity. The user then signs in passwordlessly from the web hostname by requesting a magic link / OTP. There is no password to set.
+
+## MCP connector server (apps/mcp)
+
+`apps/mcp` is a separate Coolify app on its own subdomain (the `mcp` service in `docker-compose.coolify.yml`, built from `apps/mcp/Dockerfile`). It exposes the board/task/member tool surface over the Model Context Protocol so ChatGPT, Claude, and Claude Code can act on a board on the connecting user's behalf. It never holds the service role key — only the anon key, same as `web` — and every call runs through a per-request Supabase client scoped to the caller's own JWT, so RLS is the sole authorization boundary.
+
+### GoTrue OAuth server
+
+The `mcp` service authenticates callers against GoTrue's built-in OAuth 2.1 authorization server (RFC 6749 + PKCE), already enabled on the `auth` service:
+
+```
+GOTRUE_OAUTH_SERVER_ENABLED=true
+GOTRUE_OAUTH_SERVER_ALLOW_DYNAMIC_REGISTRATION=true
+GOTRUE_OAUTH_SERVER_AUTHORIZATION_PATH=/oauth/consent
+```
+
+`GOTRUE_JWT_SECRET` (`${JWT_SECRET}`) is the same HS256 secret GoTrue signs every user JWT with. The `mcp` service reads it as `SUPABASE_JWT_SECRET` to verify bearer tokens locally, without a round-trip to `auth`. It is **not** the service role key.
+
+`GOTRUE_OAUTH_SERVER_AUTHORIZATION_PATH=/oauth/consent` points the authorization step at the web app's own consent screen (`apps/web/src/app/routes/oauth.consent.tsx`, served from the `web` hostname): the user signs in (magic link / OTP, same as the board UI) and approves the connector before GoTrue issues a token. No separate login surface exists for MCP clients.
+
+### Coolify setup
+
+1. Add the `mcp` service as its own Coolify app (or resource) built from this same repo/compose file, service `mcp`.
+2. Set "Domains for mcp" to a dedicated subdomain, e.g. `mcp.pinnwand.example.com`.
+3. Set `MCP_PUBLIC_URL` to that same URL (`https://mcp.pinnwand.example.com`) in the Coolify environment — it is embedded in the OAuth protected-resource metadata (`/.well-known/oauth-protected-resource`) returned to connecting clients.
+4. `SUPABASE_URL` and `SUPABASE_ANON_KEY` reuse `API_EXTERNAL_URL` and `ANON_KEY` already set for `web`; no new secrets beyond `MCP_PUBLIC_URL`.
+5. Redeploy. `GET https://mcp.pinnwand.example.com/health` must return `{"status":"ok"}`.
+
+### Client connect strings
+
+- **ChatGPT (GUI connector):** Settings → Connectors → Add connector, URL `https://mcp.pinnwand.example.com/mcp`.
+- **Claude (desktop/web app):** Settings → Connectors → Add custom connector, URL `https://mcp.pinnwand.example.com/mcp`.
+- **Claude Code:**
+  ```
+  claude mcp add --transport http pinnwand https://mcp.pinnwand.example.com/mcp
+  ```
+
+Each client drives the OAuth 2.1 + PKCE flow against GoTrue automatically from the protected-resource metadata; the operator does not register a client manually (dynamic client registration is enabled). The first connection prompts the user through `/oauth/consent` on the web hostname.
 
 ## Updating production
 

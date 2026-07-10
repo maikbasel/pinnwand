@@ -24,8 +24,10 @@ src/features/<feature>/
 |---|---|---|
 | `components/` | `hooks/`, `types.ts`, other components, `shared/` | `api/`, `@supabase/*` directly |
 | `hooks/` | `api/`, `types.ts`, `@tanstack/react-query`, `shared/` | React DOM components |
-| `api/` | `shared/lib/supabase.ts`, `types.ts`, `@pinnwand/contracts`, `zod` | React, hooks, components |
+| `api/` | `shared/lib/supabase.ts`, `types.ts`, `@pinnwand/contracts`, `zod`, `@/app/env` | React, hooks, components |
 | `index.ts` | Re-exports the feature's public surface only | — |
+
+`api/` modules may read config directly from `@/app/env` (the zod-parsed env module — config, no React/Supabase), the same env module `shared/lib/supabase.ts` reads.
 
 ## Cross-cutting
 
