@@ -325,14 +325,22 @@ export function TaskDetailSheet({
     <Drawer onOpenChange={onOpenChange} open={open}>
       {/* dvh, not vh: the dynamic viewport shrinks when the soft keyboard
           opens, so the drawer stays above the keyboard instead of extending
-          behind it. With overflow-y-auto + vaul's input repositioning, the
-          focused field scrolls into the visible area. */}
-      <DrawerContent className="max-h-[90dvh] overflow-y-auto">
+          behind it. */}
+      <DrawerContent className="max-h-[90dvh]">
         <DrawerHeader>
           <DrawerTitle className="sr-only">{accessibleTitle}</DrawerTitle>
           {titleField}
         </DrawerHeader>
-        {body}
+        {/* The scroll lives on this inner div, not on DrawerContent: vaul tags
+            the content root role="dialog" and its drag-gesture handling locks
+            onto touches that start there, starving native scroll (the form
+            below the fold becomes unreachable). A plain scrollable child keeps
+            the header pinned and lets the fields scroll. min-h-0 lets the flex
+            child shrink so overflow engages; the safe-area inset keeps the last
+            action clear of the iOS home indicator. */}
+        <div className="min-h-0 flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
+          {body}
+        </div>
         <DrawerClose className="sr-only">{CLOSE_LABEL}</DrawerClose>
       </DrawerContent>
     </Drawer>
