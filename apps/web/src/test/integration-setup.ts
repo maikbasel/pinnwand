@@ -5,7 +5,12 @@ import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import postgres from "postgres";
 import { Wait } from "testcontainers";
 
-const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../");
+// supabase/migrations and docker/init-scripts live at the monorepo root, four
+// levels up from this file (apps/web/src/test), not under apps/web.
+const PROJECT_ROOT = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../.."
+);
 const MIGRATIONS_DIR = join(PROJECT_ROOT, "supabase/migrations");
 const INIT_SCRIPTS_DIR = join(PROJECT_ROOT, "docker/init-scripts");
 
