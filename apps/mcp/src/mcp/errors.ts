@@ -34,6 +34,17 @@ function isSupabaseErrorLike(err: unknown): err is SupabaseErrorLike {
   );
 }
 
+// RLS denials/empty reads and RPC-raised user errors (bad join code, not the
+// owner, ...) are routine operational outcomes, not server faults — log them at
+// info so genuine faults stay findable in the error stream.
+function isExpectedDenial(err: unknown): boolean {
+  return (
+    isSupabaseErrorLike(err) &&
+    (RLS_DENIAL_OR_EMPTY_CODES.has(err.code) ||
+      err.code === RPC_RAISED_EXCEPTION_CODE)
+  );
+}
+
 function messageForSupabaseError(err: SupabaseErrorLike): string {
   if (RLS_DENIAL_OR_EMPTY_CODES.has(err.code)) {
     return NOT_A_MEMBER_MESSAGE;
@@ -56,6 +67,10 @@ export function toToolError(err: unknown): ToolErrorResult {
   } else {
     text = "An unexpected error occurred.";
   }
-  logger.error({ err }, "mcp tool error");
+  if (isExpectedDenial(err)) {
+    logger.info({ err }, "mcp tool denied");
+  } else {
+    logger.error({ err }, "mcp tool error");
+  }
   return { content: [{ type: "text", text }], isError: true };
 }

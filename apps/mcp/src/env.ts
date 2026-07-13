@@ -12,7 +12,6 @@ const EnvSchema = z.object({
   // with asymmetric ES256/RS256 and publishes a populated JWKS instead.
   SUPABASE_JWT_SECRET: z.string().min(1).optional(),
   PORT: z.coerce.number().int().positive().default(8787),
-  ALLOWED_ORIGINS: z.string().default(""),
   LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace"])
     .default("info"),

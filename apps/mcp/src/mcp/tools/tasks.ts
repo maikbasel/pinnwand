@@ -254,7 +254,7 @@ export function registerTaskTools(server: McpServer, ctx: ToolContext) {
         description: z.string().max(5000).default(""),
         column: TaskColumnSchema.default("offen"),
         priority: TaskPrioritySchema.default(DEFAULT_TASK_PRIORITY),
-        dueDate: z.string().nullable().optional(),
+        dueDate: z.string().date().nullable().optional(),
       },
     },
     async ({ boardId, title, description, column, priority, dueDate }) => {
@@ -300,7 +300,7 @@ export function registerTaskTools(server: McpServer, ctx: ToolContext) {
         title: z.string().trim().min(1).max(200).optional(),
         description: z.string().max(5000).optional(),
         priority: TaskPrioritySchema.optional(),
-        dueDate: z.string().nullable().optional(),
+        dueDate: z.string().date().nullable().optional(),
       },
     },
     async ({ taskId, title, description, priority, dueDate }) => {
@@ -400,6 +400,10 @@ export function registerTaskTools(server: McpServer, ctx: ToolContext) {
     },
     async ({ taskId, userId }) => {
       try {
+        // ponytail: read-modify-write over the full assignee set, mirroring the
+        // web app. set_task_assignees replaces the whole set, so two concurrent
+        // assigns can lose one add (last write wins). Acceptable at this app's
+        // scale; revisit with a server-side add/remove RPC if it bites.
         const currentResult = await ctx.supabase
           .from("task_assignees")
           .select("user_id")

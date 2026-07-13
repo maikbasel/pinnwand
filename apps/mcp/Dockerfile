@@ -49,9 +49,12 @@ COPY --from=build /out/package.json ./package.json
 ENV NODE_ENV=production
 USER mcp
 # Env (SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_JWT_SECRET, MCP_PUBLIC_URL,
-# SUPABASE_AUTH_URL, ALLOWED_ORIGINS, LOG_LEVEL, PORT) is read at runtime from
-# the container environment — see src/env.ts. No service role key: this image
-# only ever holds the anon key, exactly like the web bundle.
+# SUPABASE_AUTH_URL, LOG_LEVEL, PORT) is read at runtime from the container
+# environment — see src/env.ts. No service role key ever reaches this image.
+# It does hold SUPABASE_JWT_SECRET (GoTrue's HS256 secret) at runtime to verify
+# user JWTs locally: a token-verification secret, not a data-access key. On a
+# Supabase Cloud / asymmetric-signing deployment it is unset and JWKS is used
+# instead, so the running process holds only the anon key.
 EXPOSE 8787
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
   CMD wget -qO- http://localhost:8787/health >/dev/null || exit 1
