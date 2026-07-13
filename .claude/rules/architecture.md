@@ -24,8 +24,10 @@ src/features/<feature>/
 |---|---|---|
 | `components/` | `hooks/`, `types.ts`, other components, `shared/` | `api/`, `@supabase/*` directly |
 | `hooks/` | `api/`, `types.ts`, `@tanstack/react-query`, `shared/` | React DOM components |
-| `api/` | `shared/lib/supabase.ts`, `types.ts`, `@pinnwand/contracts`, `zod` | React, hooks, components |
+| `api/` | `shared/lib/supabase.ts`, `types.ts`, `@pinnwand/contracts`, `zod`, `@/app/env` | React, hooks, components |
 | `index.ts` | Re-exports the feature's public surface only | — |
+
+`api/` modules may read config directly from `@/app/env` (the zod-parsed env module — config, no React/Supabase), the same env module `shared/lib/supabase.ts` reads.
 
 ## Cross-cutting
 
@@ -35,7 +37,7 @@ src/features/<feature>/
 
 ## Resolved deviation: monorepo + `@pinnwand/contracts`
 
-The app is a pnpm-workspace + Turborepo monorepo: the Vite app lives in `apps/web`, and the shared data contract — the generated `database.ts` (`Database` type) and the fixed `TASK_COLUMNS` / `TASK_PRIORITIES` constants — lives in `packages/contracts`, imported everywhere as `@pinnwand/contracts` (source-only, no build step; resolved via the package `exports` map + `moduleResolution: bundler`). `apps/mcp` is the Phase-1 connector-server scaffold. The feature-slice layer boundaries below are unchanged; they now apply within `apps/web/src/`. The `api/` layer imports `Database` from `@pinnwand/contracts` instead of a local `shared/types/database.ts`.
+The app is a pnpm-workspace + Turborepo monorepo: the Vite app lives in `apps/web`, and the shared data contract — the generated `database.ts` (`Database` type) and the fixed `TASK_COLUMNS` / `TASK_PRIORITIES` constants — lives in `packages/contracts`, imported everywhere as `@pinnwand/contracts` (source-only, no build step; resolved via the package `exports` map + `moduleResolution: bundler`). `apps/mcp` is the remote MCP connector server (its own Node/Express process, not part of the Vite build). The feature-slice layer boundaries below are unchanged; they now apply within `apps/web/src/`. The `api/` layer imports `Database` from `@pinnwand/contracts` instead of a local `shared/types/database.ts`.
 
 ## Dependency direction
 
