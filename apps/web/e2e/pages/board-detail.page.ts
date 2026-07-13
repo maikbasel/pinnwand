@@ -125,16 +125,24 @@ export class BoardDetailPage {
     await expect(this.sheet).toBeVisible();
   }
 
+  // The edit-mode title is click-to-edit: the header shows a button labelled
+  // with the current title until clicked, then swaps in the input. Click it to
+  // reveal the field first.
+  //
   // `fill` sets the DOM value without driving Base UI's controlled onChange, so
   // the form state never updates and Save persists the old title. Real
   // keystrokes (select-all, delete, type) fire onChange per key, matching how a
   // user actually edits.
-  async editTitle(newTitle: string): Promise<void> {
+  async editTitle(currentTitle: string, newTitle: string): Promise<void> {
+    await this.sheet
+      .getByRole("button", { name: currentTitle, exact: true })
+      .click();
     const input = this.sheet.getByLabel(TASK_TITLE_LABEL);
-    await input.click();
     await input.press("ControlOrMeta+a");
     await input.press("Delete");
     await input.pressSequentially(newTitle);
+    // The title commits inline on Enter (decoupled from Speichern).
+    await input.press("Enter");
   }
 
   // Picks a column in the sheet's Status ToggleGroup. Each item is a toggle

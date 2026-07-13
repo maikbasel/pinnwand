@@ -37,7 +37,7 @@ test("a member creates, edits, moves, and deletes a task", async ({
 
     // Edit: renaming through the detail sheet updates the card in place.
     await boardDetailPage.openTask(title);
-    await boardDetailPage.editTitle(editedTitle);
+    await boardDetailPage.editTitle(title, editedTitle);
     await boardDetailPage.saveTask();
     await expect(
       boardDetailPage.cardInColumn(OFFEN, editedTitle)
