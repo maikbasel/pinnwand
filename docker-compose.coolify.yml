@@ -71,6 +71,13 @@ services:
       GOTRUE_JWT_EXP: "3600"
       GOTRUE_JWT_ADMIN_ROLES: service_role
       GOTRUE_JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      # OAuth2 server metadata (/.well-known/oauth-authorization-server) uses
+      # JWT.Issuer as its base URL. Unset it stays empty and GoTrue emits
+      # relative endpoints (/oauth/authorize), which breaks MCP OAuth clients
+      # (Claude). The ExternalURL fallback only landed in GoTrue >2.189, so we
+      # set the issuer explicitly to the external /auth/v1 base. iss is not
+      # validated by the mcp verifier or PostgREST, so this only fixes metadata.
+      GOTRUE_JWT_ISSUER: ${API_EXTERNAL_URL:?API_EXTERNAL_URL must be set}/auth/v1
       GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
       GOTRUE_MAILER_AUTOCONFIRM: "false"
       GOTRUE_MAILER_SECURE_EMAIL_CHANGE_ENABLED: "true"
