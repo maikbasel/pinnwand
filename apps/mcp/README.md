@@ -35,6 +35,37 @@ then builds a Supabase client scoped to that token and runs the tool. A real
 client gets the token through the OAuth flow the server advertises at
 `GET /.well-known/oauth-protected-resource`.
 
+## Connect from Claude and ChatGPT
+
+Both add it as a **custom remote connector** pointing at `POST /mcp`. Auth is
+per-user: the client runs the OAuth flow the server advertises, the user signs
+in through your Supabase GoTrue, and the connector holds that user's token. No
+API key field — RLS scopes every call to whoever connected.
+
+Use the deployed URL, e.g. `https://pinnwand-mcp.<your-domain>/mcp` (the
+`/mcp` path is required). See `docs/deployment.md` for the Coolify domain and
+`MCP_PUBLIC_URL` setup.
+
+**Claude** (web or Desktop): Settings → **Connectors** → **Add custom
+connector** → paste the `/mcp` URL → **Connect** → sign in.
+
+**ChatGPT** (Plus/Pro/Business, developer mode): Settings → **Connectors** →
+**Advanced** → **Create** → paste the `/mcp` URL, set auth to **OAuth** →
+**Connect** → sign in. Then enable it per-chat under the **+** / tools menu.
+
+Sanity-check the endpoints before connecting:
+
+```bash
+curl -s https://pinnwand-mcp.<your-domain>/health   # {"status":"ok"}
+curl -s https://pinnwand-mcp.<your-domain>/.well-known/oauth-protected-resource
+```
+
+The second returns your `resource` URL and an `authorization_servers` entry
+pointing at `.../auth/v1`. If **Connect** stalls at sign-in, check that GoTrue's
+OAuth metadata has **absolute** endpoints (`GOTRUE_JWT_ISSUER` must be set — see
+Common problems below), then confirm the `/mcp` endpoint itself works with a
+minted token first (next section).
+
 ## Debug it with a minted token
 
 For a quick manual check you do not need the OAuth flow. Mint a token for a
@@ -109,4 +140,5 @@ header, Reconnect, and confirm `list_boards` does not return alice's board.
 | `401 Token has no subject` | token has an empty `sub`; the id lookup returned nothing | re-mint with a real seeded id |
 | `401 Invalid or expired token` | `Bearer ` prefix missing, wrong secret, or expired | resend with the prefix and a fresh token |
 | Inspector shows an OAuth discovery wall of `invalid_format` errors | the `Authorization` header toggle is off, so the server returns 401 and the Inspector falls back to OAuth against GoTrue | enable the header toggle |
+| Claude/ChatGPT **Connect** stalls after discovery; GoTrue metadata shows `"issuer":""` and relative endpoints like `/oauth/authorize` | on GoTrue ≤2.189 the OAuth metadata base comes from `JWT.Issuer`, unset by default | set `GOTRUE_JWT_ISSUER` to `${API_EXTERNAL_URL}/auth/v1` on the `auth` service and redeploy |
 | `curl: connection refused` | server not running | check the `pnpm dev` terminal for a crash |
