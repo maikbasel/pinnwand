@@ -2,68 +2,25 @@ import { randomUUID } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { SignJWT } from "jose";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { supabaseForUser } from "../../auth/supabase-for-user";
 import { env } from "../../env";
 import { BoardRowSchema, TaskRowSchema } from "../../schemas";
+import { createAuthUser, teardownPool } from "../../test/db";
 import { createMcpServer } from "../server";
 
 // SECURITY ACCEPTANCE GATE (Task 9b): proves one user's MCP tool calls can
-// never read or write another user's board, against a REAL running Supabase
-// stack (not mocks) — the anon-key REST path (PostgREST + RLS) is the actual
-// authorization boundary the deployed mcp relies on.
-
-// TEST-ONLY provisioning secret: creates/looks up the two fixture users via
-// GoTrue's admin API. Never imported into mcp runtime source — only the anon
-// key (via supabaseForUser) reaches the tool handlers under test.
-const SERVICE_ROLE_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.kcyKZAiwnnBG9t6IVGO17bcVw574pVynTHYVdF4q-p0";
-
-const ADMIN_USERS_URL = `${env.SUPABASE_URL}/auth/v1/admin/users`;
-const ADMIN_HEADERS = {
-  apikey: SERVICE_ROLE_KEY,
-  Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
-};
-
-const AdminUserSchema = z.object({ id: z.uuid(), email: z.string().nullish() });
-const AdminUsersListSchema = z.object({ users: z.array(AdminUserSchema) });
+// never read or write another user's board. It runs against a REAL stack
+// booted in testcontainers (see src/test/integration-setup.ts): the tool
+// calls travel supabase-js -> kong (/rest/v1/*) -> PostgREST (validates the
+// user JWT -> role) -> Postgres RLS — the exact anon-key REST + RLS boundary
+// the deployed mcp relies on, not a mock.
 
 const MembershipListSchema = z.array(
   z.object({ role: z.enum(["owner", "member"]), boards: BoardRowSchema })
 );
 const TaskGroupSchema = z.record(z.string(), z.array(TaskRowSchema));
-
-/** Idempotent: looks the fixture user up by email, creates it only if absent. */
-async function findOrCreateUser(email: string): Promise<string> {
-  const listRes = await fetch(ADMIN_USERS_URL, { headers: ADMIN_HEADERS });
-  if (!listRes.ok) {
-    throw new Error(
-      `admin/users list failed: ${listRes.status} ${await listRes.text()}`
-    );
-  }
-  const { users } = AdminUsersListSchema.parse(await listRes.json());
-  const existing = users.find((u) => u.email === email);
-  if (existing) {
-    return existing.id;
-  }
-
-  const createRes = await fetch(ADMIN_USERS_URL, {
-    method: "POST",
-    headers: { ...ADMIN_HEADERS, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      email,
-      email_confirm: true,
-      password: randomUUID(),
-    }),
-  });
-  if (!createRes.ok) {
-    throw new Error(
-      `admin/users create failed: ${createRes.status} ${await createRes.text()}`
-    );
-  }
-  return AdminUserSchema.parse(await createRes.json()).id;
-}
 
 /** Mints a real user-scoped JWT the stack accepts (HS256, GOTRUE_JWT_SECRET). */
 async function mintUserToken(userId: string): Promise<string> {
@@ -142,8 +99,8 @@ describe("RLS impersonation via MCP tools (live Supabase stack)", () => {
 
   beforeAll(async () => {
     const [aliceId, charlieId] = await Promise.all([
-      findOrCreateUser("alice@dev.local"),
-      findOrCreateUser("charlie@dev.local"),
+      createAuthUser(`alice-${runId}@dev.local`),
+      createAuthUser(`charlie-${runId}@dev.local`),
     ]);
     const [aliceToken, charlieToken] = await Promise.all([
       mintUserToken(aliceId),
@@ -153,6 +110,10 @@ describe("RLS impersonation via MCP tools (live Supabase stack)", () => {
       connectedClient(supabaseForUser(aliceToken), aliceId),
       connectedClient(supabaseForUser(charlieToken), charlieId),
     ]);
+  });
+
+  afterAll(async () => {
+    await teardownPool();
   });
 
   it("keeps alice's board and tasks unreachable to charlie through every MCP tool", async () => {
@@ -245,5 +206,82 @@ describe("RLS impersonation via MCP tools (live Supabase stack)", () => {
         .map((t) => t.title);
       expect(charlieTaskTitles).not.toContain(aliceTaskTitle);
     }
+  });
+
+  it("denies charlie every mutating MCP tool aimed at alice's board and task", async () => {
+    // Alice provisions a board + task for charlie to attack. The read/create
+    // test above covers get_board/create_task; this one covers the mutating
+    // tools — including assign_task/unassign_task, which reach the data through
+    // the set_task_assignees SECURITY DEFINER RPC rather than table RLS, so
+    // their membership check has to be proven independently.
+    const aliceBoard = parseToolJson(
+      await callTool(aliceClient, "create_board", {
+        name: `Alice MutBoard ${runId}`,
+      }),
+      BoardRowSchema
+    );
+    const editedTitle = `Alice MutTask ${runId} edited`;
+    const aliceTask = parseToolJson(
+      await callTool(aliceClient, "create_task", {
+        boardId: aliceBoard.id,
+        title: `Alice MutTask ${runId}`,
+      }),
+      TaskRowSchema
+    );
+
+    // Positive control: alice can update her own task, so a charlie denial
+    // below is real RLS enforcement, not a tool that errors for everyone.
+    const aliceUpdate = await callTool(aliceClient, "update_task", {
+      taskId: aliceTask.id,
+      title: editedTitle,
+    });
+    expect(aliceUpdate.isError).toBeFalsy();
+
+    // Every mutating tool charlie points at alice's board/task is denied.
+    const denials = await Promise.all([
+      callTool(charlieClient, "update_task", {
+        taskId: aliceTask.id,
+        title: "charlie was here",
+      }),
+      callTool(charlieClient, "move_task", {
+        taskId: aliceTask.id,
+        column: "erledigt",
+      }),
+      callTool(charlieClient, "assign_task", {
+        taskId: aliceTask.id,
+        userId: randomUUID(),
+      }),
+      callTool(charlieClient, "unassign_task", {
+        taskId: aliceTask.id,
+        userId: randomUUID(),
+      }),
+      callTool(charlieClient, "delete_task", { taskId: aliceTask.id }),
+      callTool(charlieClient, "rename_board", {
+        boardId: aliceBoard.id,
+        name: "charlie's board now",
+      }),
+      callTool(charlieClient, "regenerate_join_code", {
+        boardId: aliceBoard.id,
+      }),
+      callTool(charlieClient, "delete_board", { boardId: aliceBoard.id }),
+    ]);
+    for (const denial of denials) {
+      expect(denial.isError).toBe(true);
+    }
+
+    // None of it landed: alice's task keeps her own edit and original column,
+    // and her board keeps its name.
+    const afterTask = parseToolJson(
+      await callTool(aliceClient, "get_task", { taskId: aliceTask.id }),
+      TaskRowSchema
+    );
+    expect(afterTask.title).toBe(editedTitle);
+    expect(afterTask.column).toBe("offen");
+
+    const afterBoard = parseToolJson(
+      await callTool(aliceClient, "get_board", { boardId: aliceBoard.id }),
+      z.object({ board: BoardRowSchema })
+    );
+    expect(afterBoard.board.name).toBe(`Alice MutBoard ${runId}`);
   });
 });

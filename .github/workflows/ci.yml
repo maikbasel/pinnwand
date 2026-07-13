@@ -85,11 +85,15 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # ubuntu-latest runners have Docker preinstalled. Pre-pull the image so
-      # the test timer isn't dominated by the ~150MB image fetch on cold-cache
-      # runs; the integration setup reuses the cached layer.
-      - name: Pre-pull supabase/postgres image
-        run: docker pull supabase/postgres:15.14.1.121
+      # ubuntu-latest runners have Docker preinstalled. Pre-pull the images so
+      # the test timer isn't dominated by cold-cache fetches; the integration
+      # setups (web: postgres; mcp: postgres + PostgREST + kong) reuse the
+      # cached layers.
+      - name: Pre-pull integration images
+        run: |
+          docker pull supabase/postgres:15.14.1.121
+          docker pull postgrest/postgrest:v12.2.12
+          docker pull kong:2.8.1
       - run: pnpm test:integration
 
   dead-code:
