@@ -10,6 +10,8 @@ export const TASK_DESCRIPTION_LABEL = "Beschreibung";
 export const TASK_COLUMN_LABEL = "Status";
 export const TASK_PRIORITY_LABEL = "Priorität";
 export const TASK_DUE_LABEL = "Fällig am";
+export const TASK_DUE_PLACEHOLDER = "Datum wählen";
+export const TASK_DUE_CLEAR_LABEL = "Datum entfernen";
 export const TASK_ASSIGNEES_LABEL = "Verantwortliche";
 export const TASK_ASSIGNEES_EMPTY =
   "Noch keine Mitglieder auf dieser Pinnwand.";

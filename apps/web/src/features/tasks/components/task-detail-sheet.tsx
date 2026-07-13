@@ -4,7 +4,7 @@ import {
   type TaskColumnId,
   type TaskPriorityId,
 } from "@pinnwand/contracts";
-import { AlignLeft, CalendarClock, Columns3, Flag, Type } from "lucide-react";
+import { AlignLeft, Columns3, Flag } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -39,7 +39,6 @@ import {
   SAVE_TASK_LABEL,
   TASK_COLUMN_LABEL,
   TASK_DESCRIPTION_LABEL,
-  TASK_DUE_LABEL,
   TASK_PRIORITY_LABEL,
   TASK_TITLE_LABEL,
   TASK_TITLE_PLACEHOLDER,
@@ -47,6 +46,8 @@ import {
 import type { Task } from "../types";
 import { AssigneePicker } from "./assignee-picker";
 import { useDeferredDelete } from "./deferred-delete";
+import { DueDateField } from "./due-date-field";
+import { TaskTitleField } from "./task-title-field";
 
 const DESKTOP_QUERY = "(min-width: 768px)";
 
@@ -110,13 +111,37 @@ export function TaskDetailSheet({
 
   const busy =
     createTask.isPending || updateTask.isPending || moveTask.isPending;
+  // Create needs a non-empty title before Save; in edit mode the title is
+  // committed inline (immediately), so it is never part of this gate.
+  const canSave = mode.kind === "create" ? form.title.trim() !== "" : true;
+
+  // Inline title commit (edit mode): an immediate optimistic write, decoupled
+  // from Save, mirroring how assignees write on their own. The other fields are
+  // sent at their last-persisted values so an in-progress (unsaved) body edit is
+  // never flushed early by a title change.
+  async function commitTitle(nextTitle: string): Promise<void> {
+    if (mode.kind !== "edit") {
+      return;
+    }
+    try {
+      await updateTask.mutateAsync({
+        taskId: mode.task.id,
+        title: nextTitle,
+        description: mode.task.description,
+        priority: mode.task.priority,
+        dueDate: mode.task.dueDate,
+      });
+    } catch {
+      // Optimistic update rolled back; the global toast surfaces the error.
+    }
+  }
 
   async function save(): Promise<void> {
-    if (busy || form.title.trim() === "") {
+    const title = mode.kind === "create" ? form.title.trim() : mode.task.title;
+    if (busy || title === "") {
       return;
     }
     const dueDate = form.dueDate === "" ? null : form.dueDate;
-    const title = form.title.trim();
     try {
       if (mode.kind === "create") {
         await createTask.mutateAsync({
@@ -151,25 +176,6 @@ export function TaskDetailSheet({
 
   const body = (
     <div className="flex flex-col gap-4 px-4 pb-4">
-      <div className="flex flex-col gap-2">
-        <Label className="flex items-center gap-2" htmlFor="task-title">
-          <Type aria-hidden="true" className={FIELD_ICON_CLASS} />
-          {TASK_TITLE_LABEL}
-        </Label>
-        <Input
-          // Autofocus on desktop only. In the mobile Drawer, focusing the field
-          // pops the soft keyboard mid-open-animation, which fights vaul's
-          // viewport repositioning and makes the sheet jump. The user taps the
-          // field once the drawer has settled instead.
-          autoFocus={isDesktop}
-          id="task-title"
-          onChange={(event) =>
-            setForm((current) => ({ ...current, title: event.target.value }))
-          }
-          placeholder={TASK_TITLE_PLACEHOLDER}
-          value={form.title}
-        />
-      </div>
       <div className="flex flex-col gap-2">
         <Label className="flex items-center gap-2" htmlFor="task-desc">
           <AlignLeft aria-hidden="true" className={FIELD_ICON_CLASS} />
@@ -235,20 +241,12 @@ export function TaskDetailSheet({
           ))}
         </ToggleGroup>
       </div>
-      <div className="flex flex-col gap-2">
-        <Label className="flex items-center gap-2" htmlFor="task-due">
-          <CalendarClock aria-hidden="true" className={FIELD_ICON_CLASS} />
-          {TASK_DUE_LABEL}
-        </Label>
-        <Input
-          id="task-due"
-          onChange={(event) =>
-            setForm((current) => ({ ...current, dueDate: event.target.value }))
-          }
-          type="date"
-          value={form.dueDate}
-        />
-      </div>
+      <DueDateField
+        onChange={(next) =>
+          setForm((current) => ({ ...current, dueDate: next }))
+        }
+        value={form.dueDate}
+      />
       {/* Assignees write immediately (they need a persisted task id), so the
           picker exists in edit mode only and each toggle fires its own
           optimistic set-assignees rather than waiting for Save. */}
@@ -262,11 +260,7 @@ export function TaskDetailSheet({
           value={assigneeIds}
         />
       ) : null}
-      <Button
-        disabled={busy || form.title.trim() === ""}
-        onClick={save}
-        type="button"
-      >
+      <Button disabled={busy || !canSave} onClick={save} type="button">
         {SAVE_TASK_LABEL}
       </Button>
       {/* Delete routes through the deferred-delete flow: the sheet closes, the
@@ -286,7 +280,29 @@ export function TaskDetailSheet({
     </div>
   );
 
-  const title = mode.kind === "create" ? CREATE_TASK_TITLE : mode.task.title;
+  // Keeps a stable accessible name on the dialog while the visible title is an
+  // interactive control (an inline editor in edit mode, an input in create).
+  const accessibleTitle =
+    mode.kind === "create" ? CREATE_TASK_TITLE : mode.task.title;
+
+  const titleField =
+    mode.kind === "edit" ? (
+      <TaskTitleField onCommit={commitTitle} value={mode.task.title} />
+    ) : (
+      <Input
+        // Autofocus on desktop only. In the mobile Drawer, focusing the field
+        // pops the soft keyboard mid-open-animation, which fights vaul's
+        // viewport repositioning and makes the sheet jump.
+        aria-label={TASK_TITLE_LABEL}
+        autoFocus={isDesktop}
+        className="h-9 font-semibold text-base"
+        onChange={(event) =>
+          setForm((current) => ({ ...current, title: event.target.value }))
+        }
+        placeholder={TASK_TITLE_PLACEHOLDER}
+        value={form.title}
+      />
+    );
 
   if (isDesktop) {
     return (
@@ -296,7 +312,8 @@ export function TaskDetailSheet({
           side="right"
         >
           <SheetHeader>
-            <SheetTitle>{title}</SheetTitle>
+            <SheetTitle className="sr-only">{accessibleTitle}</SheetTitle>
+            {titleField}
           </SheetHeader>
           {body}
         </SheetContent>
@@ -312,7 +329,8 @@ export function TaskDetailSheet({
           focused field scrolls into the visible area. */}
       <DrawerContent className="max-h-[90dvh] overflow-y-auto">
         <DrawerHeader>
-          <DrawerTitle>{title}</DrawerTitle>
+          <DrawerTitle className="sr-only">{accessibleTitle}</DrawerTitle>
+          {titleField}
         </DrawerHeader>
         {body}
         <DrawerClose className="sr-only">{CLOSE_LABEL}</DrawerClose>
