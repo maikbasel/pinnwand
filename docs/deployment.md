@@ -28,6 +28,27 @@ curl -sSL https://raw.githubusercontent.com/supabase/supabase/master/docker/util
 
 Pure `openssl`, no Node or Python. It prints `JWT_SECRET` (`openssl rand -base64 30`, 40 chars) and the two HS256-signed JWTs derived from it. The three values are mathematically linked. Never rotate one without rotating all three together.
 
+### `JWT_KEYS`, `JWT_JWKS` (asymmetric JWT signing keys)
+
+**Required.** The OAuth 2.1 server mints OIDC **ID tokens** whenever a client requests the `openid` scope — which Claude and ChatGPT always do. ID tokens cannot be signed with the symmetric HS256 secret; without an asymmetric key GoTrue returns `500: Error generating ID token` (`HS256 is not supported for ID token signing`) at the token-exchange step and the connector fails right after consent. This is [documented Supabase behavior](https://supabase.com/docs/guides/self-hosting/self-hosted-auth-keys).
+
+Generate an EC P-256 (ES256) keypair and fold in your existing `JWT_SECRET` as a legacy `oct` key (so all current HS256 anon/service/session tokens keep verifying — the migration is additive). Run with your **production** `JWT_SECRET`:
+
+```bash
+JWT_SECRET='<your production JWT_SECRET>' node -e '
+const c=require("crypto");
+const {privateKey}=c.generateKeyPairSync("ec",{namedCurve:"P-256"});
+const j=privateKey.export({format:"jwk"}), kid=c.randomUUID();
+const oct={kty:"oct",k:Buffer.from(process.env.JWT_SECRET).toString("base64url"),alg:"HS256"};
+const priv={kty:"EC",kid,use:"sig",key_ops:["sign","verify"],alg:"ES256",ext:true,crv:j.crv,x:j.x,y:j.y,d:j.d};
+const pub ={kty:"EC",kid,use:"sig",key_ops:["verify"],alg:"ES256",ext:true,crv:j.crv,x:j.x,y:j.y};
+console.log("JWT_KEYS="+JSON.stringify([priv,oct]));
+console.log("JWT_JWKS="+JSON.stringify({keys:[pub,oct]}));
+'
+```
+
+Set both output values on the Coolify resource. `JWT_KEYS` (the array — contains the **private** key, treat as a secret) goes to GoTrue as `GOTRUE_JWT_KEYS`; `JWT_JWKS` (public only) goes to PostgREST (`PGRST_JWT_SECRET`) and realtime (`API_JWT_JWKS`). GoTrue then signs every token with ES256 and publishes the public key at `/auth/v1/.well-known/jwks.json`; the `mcp` server verifies bearer tokens against that endpoint automatically. Regenerate these whenever you rotate `JWT_SECRET`.
+
 ### `REALTIME_ENC_KEY`
 
 ```bash
@@ -61,6 +82,8 @@ POSTGRES_PASSWORD
 JWT_SECRET
 ANON_KEY
 SERVICE_ROLE_KEY
+JWT_KEYS
+JWT_JWKS
 REALTIME_ENC_KEY
 REALTIME_SECRET_KEY_BASE
 SITE_URL
@@ -122,7 +145,7 @@ You can still trigger a redeploy straight from the Coolify UI; the workflow is a
 ## First deploy checklist
 
 - [ ] Coolify resource created from `docker-compose.coolify.yml`.
-- [ ] All 14 required env vars set on the resource (see above).
+- [ ] All 16 required env vars set on the resource (see above).
 - [ ] The four secret groups generated with the documented commands, not reused from another project.
 - [ ] Four "Domains for…" entries filled (`web`, `kong`, `studio`, `mcp`).
 - [ ] SSO/auth proxy pointing at the studio hostname with the operator policy attached.

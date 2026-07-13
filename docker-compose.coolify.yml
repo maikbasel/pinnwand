@@ -12,6 +12,8 @@
 # Required Coolify-injected env vars (gated by ${VAR:?…} below; `docker compose
 # config` fails fast if any are missing):
 #   POSTGRES_PASSWORD, JWT_SECRET, ANON_KEY, SERVICE_ROLE_KEY,
+#   JWT_KEYS + JWT_JWKS (asymmetric JWT signing keys, generated from
+#     JWT_SECRET — required for the OAuth 2.1 server / OIDC; see docs/deployment.md),
 #   REALTIME_ENC_KEY (exactly 16 bytes, `openssl rand -hex 8`),
 #   REALTIME_SECRET_KEY_BASE (at least 64 bytes, `openssl rand -hex 32`),
 #   SITE_URL, API_EXTERNAL_URL,
@@ -71,6 +73,15 @@ services:
       GOTRUE_JWT_EXP: "3600"
       GOTRUE_JWT_ADMIN_ROLES: service_role
       GOTRUE_JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      # Asymmetric JWT signing keys (JSON array of JWKs: an EC/RSA private
+      # signing key + the legacy HS256 secret as an `oct` key for backward
+      # compat). REQUIRED because the OAuth 2.1 server must mint OIDC ID tokens
+      # (Claude/ChatGPT request the `openid` scope) and ID tokens cannot be
+      # signed with HS256 — GoTrue 500s ("HS256 is not supported for ID token
+      # signing") otherwise. Generate JWT_KEYS + JWT_JWKS from JWT_SECRET; see
+      # docs/deployment.md. GoTrue signs with the asymmetric key; the retained
+      # oct key keeps existing HS256 anon/service/session tokens valid.
+      GOTRUE_JWT_KEYS: ${JWT_KEYS:?JWT_KEYS must be set (asymmetric JWKS array; see docs/deployment.md)}
       # OAuth2 server metadata (/.well-known/oauth-authorization-server) uses
       # JWT.Issuer as its base URL. Unset it stays empty and GoTrue emits
       # relative endpoints (/oauth/authorize), which breaks MCP OAuth clients
@@ -135,7 +146,9 @@ services:
       PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@db:5432/postgres
       PGRST_DB_SCHEMAS: public,graphql_public
       PGRST_DB_ANON_ROLE: anon
-      PGRST_JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      # Public JWKS (EC/RSA public key + legacy HS256 oct key). Verifies both
+      # the new asymmetric user tokens and the legacy HS256 anon/service keys.
+      PGRST_JWT_SECRET: ${JWT_JWKS:?JWT_JWKS must be set (public JWKS; see docs/deployment.md)}
       PGRST_DB_USE_LEGACY_GUCS: "false"
       # Admin server exposes /live and /ready. /ready returns 200 only when the
       # DB connection is up AND the schema cache is loaded, a real readiness
@@ -173,6 +186,9 @@ services:
       # `openssl rand -hex 8` (→ 16 hex chars = 16 bytes).
       DB_ENC_KEY: ${REALTIME_ENC_KEY:?REALTIME_ENC_KEY must be set (exactly 16 bytes, e.g. `openssl rand -hex 8`)}
       API_JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      # Public JWKS so realtime verifies the new asymmetric user tokens (the
+      # oct key inside keeps HS256 tokens working too). Same value as rest.
+      API_JWT_JWKS: ${JWT_JWKS:?JWT_JWKS must be set (public JWKS; see docs/deployment.md)}
       METRICS_JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
       # Phoenix's cookie session store validates that SECRET_KEY_BASE is ≥ 64
       # bytes. Generate with: `openssl rand -hex 32` (→ 64 chars).
