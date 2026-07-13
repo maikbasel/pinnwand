@@ -239,9 +239,14 @@ services:
       PLAYWRIGHT_ARGS: ${PLAYWRIGHT_ARGS:-}
     volumes:
       - ./:/work:cached
+      # Container-local node_modules (root + web) so the host's node_modules
+      # never leaks in and installs are cached across runs. The workspace
+      # install populates both; @playwright/test + the config + the specs all
+      # live in apps/web now, so Playwright runs filtered into that package.
       - playwright_node_modules:/work/node_modules
-      - ./playwright-report:/work/playwright-report
-      - ./test-results:/work/test-results
+      - playwright_web_node_modules:/work/apps/web/node_modules
+      - ./playwright-report:/work/apps/web/playwright-report
+      - ./test-results:/work/apps/web/test-results
     command:
       - sh
       - -c
@@ -250,7 +255,8 @@ services:
         corepack enable
         corepack prepare pnpm@10.18.0 --activate
         pnpm install --frozen-lockfile
-        pnpm exec playwright test $${PLAYWRIGHT_ARGS}
+        pnpm --filter @pinnwand/web exec playwright test $${PLAYWRIGHT_ARGS}
 
 volumes:
   playwright_node_modules:
+  playwright_web_node_modules:

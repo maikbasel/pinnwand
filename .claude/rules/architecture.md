@@ -24,14 +24,18 @@ src/features/<feature>/
 |---|---|---|
 | `components/` | `hooks/`, `types.ts`, other components, `shared/` | `api/`, `@supabase/*` directly |
 | `hooks/` | `api/`, `types.ts`, `@tanstack/react-query`, `shared/` | React DOM components |
-| `api/` | `shared/lib/supabase.ts`, `types.ts`, `database.ts`, `zod` | React, hooks, components |
+| `api/` | `shared/lib/supabase.ts`, `types.ts`, `@pinnwand/contracts`, `zod` | React, hooks, components |
 | `index.ts` | Re-exports the feature's public surface only | — |
 
 ## Cross-cutting
 
-- `src/shared/lib/supabase.ts` is the **only** file that calls `createClient` — every `api/` module imports the singleton from there.
-- `src/shared/` holds primitives reused across features: UI components, hooks, lib utilities, generated `types/database.ts`.
-- `src/app/` is the router + entry shell. Zero business logic. Routes import from features' `index.ts`.
+- `apps/web/src/shared/lib/supabase.ts` is the **only** file that calls `createClient` — every `api/` module imports the singleton from there.
+- `apps/web/src/shared/` holds primitives reused across features: UI components, hooks, lib utilities.
+- `apps/web/src/app/` is the router + entry shell. Zero business logic. Routes import from features' `index.ts`.
+
+## Resolved deviation: monorepo + `@pinnwand/contracts`
+
+The app is a pnpm-workspace + Turborepo monorepo: the Vite app lives in `apps/web`, and the shared data contract — the generated `database.ts` (`Database` type) and the fixed `TASK_COLUMNS` / `TASK_PRIORITIES` constants — lives in `packages/contracts`, imported everywhere as `@pinnwand/contracts` (source-only, no build step; resolved via the package `exports` map + `moduleResolution: bundler`). `apps/mcp` is the Phase-1 connector-server scaffold. The feature-slice layer boundaries below are unchanged; they now apply within `apps/web/src/`. The `api/` layer imports `Database` from `@pinnwand/contracts` instead of a local `shared/types/database.ts`.
 
 ## Dependency direction
 

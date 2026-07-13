@@ -9,13 +9,22 @@ ENV PATH=$PNPM_HOME:$PATH
 
 # ---- deps stage (cacheable install) --------------------------------------
 FROM base AS deps
-COPY pnpm-lock.yaml package.json .npmrc* ./
+# Workspace install needs every package manifest + the workspace file, but not
+# the sources — copying only manifests keeps this layer cached until a
+# dependency actually changes.
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc* ./
+COPY apps/web/package.json ./apps/web/
+COPY apps/mcp/package.json ./apps/mcp/
+COPY packages/contracts/package.json ./packages/contracts/
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile
 
 # ---- build stage (produces dist/) ----------------------------------------
 FROM base AS build
-COPY --from=deps /app/node_modules ./node_modules
+# Bring the whole installed workspace (root + per-package node_modules with
+# their pnpm symlinks intact) then overlay sources. node_modules is
+# .dockerignore'd, so `COPY . .` never clobbers the installed tree.
+COPY --from=deps /app/ ./
 COPY . .
 # Vite inlines VITE_* at build time, so the frontend's Supabase URL + anon key
 # must arrive as build args here; a runtime env on the web container is never
@@ -56,7 +65,7 @@ CMD ["node", "scripts/seed-dev.mjs"]
 # ---- runtime stage (caddy serving dist/) ---------------------------------
 FROM caddy:2.8-alpine AS runtime
 COPY docker/Caddyfile /etc/caddy/Caddyfile
-COPY --from=build /app/dist /srv
+COPY --from=build /app/apps/web/dist /srv
 # Run as non-root. Port 8080 is unprivileged, so caddy doesn't need CAP_NET_BIND.
 # /data and /config are caddy's XDG dirs (autosave, certificates); must be writable.
 RUN addgroup -S caddy 2>/dev/null || true \

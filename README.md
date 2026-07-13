@@ -48,9 +48,9 @@ pnpm dev:up     # Boot the backend (Postgres, kong, auth, rest, realtime, studio
 pnpm dev        # Vite dev server
 ```
 
-Open **http://localhost:5173**. The committed `.env` already points the
+Open **http://localhost:5173**. The default `apps/web/.env` already points the
 frontend at the local gateway with the public Supabase demo anon key, so there
-is no manual configuration step.
+is no manual configuration step (copy `apps/web/.env.example` if it is missing).
 
 Stop the backend with `pnpm dev:down` (keeps the database volume) or
 `pnpm dev:reset` (wipes it).
