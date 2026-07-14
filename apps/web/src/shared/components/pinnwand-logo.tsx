@@ -20,11 +20,13 @@ const VARIANT_CLASS: Record<PinnwandLogoVariant, string> = {
 };
 
 /**
- * The in-app pushpin brand mark. The SVG geometry is the single source of
+ * The in-app Stecknadel brand mark. The SVG geometry is the single source of
  * truth shared with `public/favicon.svg` (the PWA/favicon icon source): a
- * rounded tile (`.pinnwand-bg`) with a tilted pushpin glyph (`.pinnwand-glyph`).
- * Colours come from CSS variant classes bound to the theme palette, so dark
- * mode adapts automatically.
+ * rounded tile (`.pinnwand-bg`) with a tilted round-headed pin (`.pinnwand-glyph`),
+ * a ball head plus a tapered needle. Colours come from CSS variant classes bound
+ * to the theme palette, so dark mode adapts automatically. The favicon source
+ * additionally carries a radial depth gradient on the head that the themeable
+ * flat glyph here omits (it renders at small sizes and in mono/ghost variants).
  */
 export function PinnwandLogo({
   variant = "default",
@@ -47,15 +49,14 @@ export function PinnwandLogo({
       {...rest}
     >
       {decorative ? null : <title>{title}</title>}
-      <rect className="pinnwand-bg" height="96" rx="22" width="96" />
+      <rect className="pinnwand-bg" height="96" rx="23" width="96" />
       <g
         className="pinnwand-glyph"
-        transform="translate(48 48) scale(0.8) translate(-39 -44)"
+        transform="translate(16.5 16.5) scale(2.625)"
       >
-        <g transform="rotate(-22 48 48)">
-          <rect height="20" rx="10" width="42" x="27" y="14" />
-          <rect height="11" opacity="0.82" rx="3" width="16" x="40" y="33" />
-          <path d="M43 44 L53 44 L48 82 Z" />
+        <g transform="rotate(-32 12 12)">
+          <path d="M11.3 8.6L12.7 8.6L12 22.6Z" fillOpacity={0.82} />
+          <circle cx="12" cy="5.9" r="4" />
         </g>
       </g>
     </svg>
