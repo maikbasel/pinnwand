@@ -1,8 +1,28 @@
-# Pinnwand
+<h1 align="center">
+  <img src="apps/web/public/favicon.svg" alt="" width="56" height="56" valign="middle" />
+  &nbsp;Pinnwand
+</h1>
 
-Shared Kanban task boards in a mobile-first PWA. Create a board, share it with
-a join code, and track tasks across four fixed columns with priorities and
-multiple assignees, synced in real time.
+<p align="center">
+  Shared Kanban task boards in a mobile-first PWA. Create a board, share it with
+  a join code, and track tasks across four fixed columns with priorities and
+  multiple assignees, synced in real time.
+</p>
+
+<p align="center">
+  <a href="https://github.com/maikbasel/pinnwand/actions/workflows/ci.yml"><img src="https://github.com/maikbasel/pinnwand/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/maikbasel/pinnwand/actions/workflows/e2e.yml"><img src="https://github.com/maikbasel/pinnwand/actions/workflows/e2e.yml/badge.svg" alt="E2E" /></a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/React-19-61dafb?logo=react&logoColor=white" alt="React 19" />
+  <img src="https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Vite-8-646cff?logo=vite&logoColor=white" alt="Vite" />
+  <img src="https://img.shields.io/badge/Tailwind_CSS-4-38bdf8?logo=tailwindcss&logoColor=white" alt="Tailwind CSS 4" />
+  <img src="https://img.shields.io/badge/Supabase-self--hosted-3ecf8e?logo=supabase&logoColor=white" alt="Supabase" />
+  <img src="https://img.shields.io/badge/PWA-offline--first-5a0fc8?logo=pwa&logoColor=white" alt="PWA" />
+  <img src="https://img.shields.io/badge/license-UNLICENSED-lightgrey" alt="License" />
+</p>
 
 ## Features
 
