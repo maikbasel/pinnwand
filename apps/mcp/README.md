@@ -2,9 +2,9 @@
 
 Remote MCP connector server for Pinnwand. It exposes the board and task
 operations as MCP tools over streamable HTTP. Every request carries the
-caller's Supabase (GoTrue) JWT; the server acts as that user through a
-per-request anon-key Supabase client, so Postgres RLS stays the only
-authorization boundary. The service role key never touches this server.
+caller's Supabase (GoTrue) JWT. The server acts as that user through a
+per-request anon-key Supabase client, so Postgres RLS is the only thing that
+grants access. The service role key never reaches this server.
 
 ## Run it locally
 
@@ -37,10 +37,10 @@ client gets the token through the OAuth flow the server advertises at
 
 ## Connect from Claude and ChatGPT
 
-Both add it as a **custom remote connector** pointing at `POST /mcp`. Auth is
-per-user: the client runs the OAuth flow the server advertises, the user signs
-in through your Supabase GoTrue, and the connector holds that user's token. No
-API key field — RLS scopes every call to whoever connected.
+Each one adds it as a **custom remote connector** pointing at `POST /mcp`. Auth
+is per user: the client runs the OAuth flow, the user signs in through your
+Supabase GoTrue, and the connector keeps that user's token. There is no API key
+field. RLS scopes every call to whoever connected.
 
 Use the deployed URL, e.g. `https://pinnwand-mcp.<your-domain>/mcp` (the
 `/mcp` path is required). See `docs/deployment.md` for the Coolify domain and
@@ -53,6 +53,16 @@ connector** → paste the `/mcp` URL → **Connect** → sign in.
 **Advanced** → **Create** → paste the `/mcp` URL, set auth to **OAuth** →
 **Connect** → sign in. Then enable it per-chat under the **+** / tools menu.
 
+**Claude Code** (CLI): add the server, then authenticate from a session.
+
+```bash
+# -s user makes it available in every project (omit for current project only)
+claude mcp add --transport http -s user pinnwand https://pinnwand-mcp.<your-domain>/mcp
+```
+
+Inside a session, run `/mcp` → select **pinnwand** → **Authenticate** to run the
+same browser OAuth flow. `claude mcp list` shows the connection status.
+
 Sanity-check the endpoints before connecting:
 
 ```bash
@@ -62,9 +72,9 @@ curl -s https://pinnwand-mcp.<your-domain>/.well-known/oauth-protected-resource
 
 The second returns your `resource` URL and an `authorization_servers` entry
 pointing at `.../auth/v1`. If **Connect** stalls at sign-in, check that GoTrue's
-OAuth metadata has **absolute** endpoints (`GOTRUE_JWT_ISSUER` must be set — see
-Common problems below), then confirm the `/mcp` endpoint itself works with a
-minted token first (next section).
+OAuth metadata has **absolute** endpoints (set `GOTRUE_JWT_ISSUER`; see Common
+problems below). Then confirm the `/mcp` endpoint works with a minted token, as
+the next section shows.
 
 ## Debug it with a minted token
 
