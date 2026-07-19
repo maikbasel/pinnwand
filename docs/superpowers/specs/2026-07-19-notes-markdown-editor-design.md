@@ -1,33 +1,34 @@
-# Notizen: collaborative markdown notes
+# Notizen: collaborative notes
 
 Status: approved, not yet implemented
 Date: 2026-07-19
 
 ## Summary
 
-Board-scoped notes written in a live-preview markdown editor, synced in real time between board members via a Yjs CRDT.
+Board-scoped notes written in a block-based rich-text editor, synced in real time between board members via a Yjs CRDT.
 
-The user writes literal markdown. Syntax markers are hidden by CSS unless the caret is inside the construct they belong to, at which point they appear and can be edited like any other character. This is the MarkText and Obsidian Live Preview model.
+The editing model is the one Notion, Linear, and Slack canvas use: the user types markdown syntax as a shortcut, and it is consumed and applied. Typing `## ` produces a heading and the `##` disappears. The document is a structured tree, not a markdown string. Markdown remains available as an export format.
 
-The editor is CodeMirror 6 bound to a `Y.Text` holding the raw markdown. Document state syncs through an append-only Postgres table observed with `postgres_changes`. Cursor positions sync through a separate ephemeral broadcast channel carrying the `y-protocols` awareness protocol.
+The editor is Tiptap 3 bound to a `Y.XmlFragment`. Document state syncs through an append-only Postgres table observed with `postgres_changes`. Cursor positions sync through a separate ephemeral broadcast channel carrying the `y-protocols` awareness protocol.
 
 ## Goals
 
 - Create and delete notes on a board. A note is titled by its first line, not renamed separately.
-- The user writes markdown syntax directly and sees it rendered in place.
-- Markers are real, editable text. Selecting, editing, or deleting a `###` behaves exactly like editing any other character.
+- Markdown shortcuts for entry: headings, bold, italic, strikethrough, inline code, bullet and ordered lists, task lists, blockquotes, code blocks.
+- Change the type of an existing block, including turning a heading back into a paragraph.
 - Two members editing one note converge without losing work, including when both edited offline.
 - Live carets showing where each member is in the document.
 - Offline-first: notes readable and editable offline, writes resume on reconnect.
+- Copy or export a note as markdown.
 
 ## Non-goals
 
-- Rendered widgets beyond task-list checkboxes. Images, tables, and horizontal rules stay as styled source text.
+- Visible or editable syntax markers. Markers are consumed on entry and do not persist in the document. See "Editing model" for why this was chosen over the alternative.
+- A source view. The stored format is a tree, so there is no source to show. Markdown export covers copying out.
+- Images, tables, and horizontal rules.
 - Transforming a note into a task. Deferred until real usage shows what the transform should do.
 - Note search or full-text indexing.
 - Note attachments.
-
-Note that "full markdown coverage" is not listed as a goal *or* a non-goal, because with this architecture it stops being a question. The document is a markdown string. Syntax the decorations do not recognise is preserved verbatim and rendered as plain text. Footnotes, tables, and HTML blocks survive round-trips for free because there is no round-trip.
 
 ## Domain model
 
@@ -39,14 +40,14 @@ A board has many notes. A note belongs to exactly one board, the same one-to-man
 | --- | --- | --- |
 | `id` | `uuid` pk | `default gen_random_uuid()` |
 | `board_id` | `uuid not null` | `references public.boards(id) on delete cascade` |
-| `title` | `text not null default ''` | Written by the client, derived from the document's first line |
+| `title` | `text not null default ''` | Written by the client, derived from the document's first block |
 | `snapshot_b64` | `text` | `Y.encodeStateAsUpdate` output, base64. Null until first compaction |
 | `snapshot_up_to_id` | `bigint not null default 0` | Highest `note_updates.id` folded into the snapshot |
 | `created_by` | `uuid not null` | `references public.profiles(id)` |
 | `created_at` | `timestamptz not null default now()` | |
 | `updated_at` | `timestamptz not null default now()` | Set by trigger on any `notes` update, so the list can sort by recency |
 
-There is no separate rename operation. `title` is a derived cache of the document's first line, written by the client on the same debounce as the update insert. It exists so the notes list is a plain indexed query rather than requiring CRDT decoding in Postgres.
+There is no separate rename operation. `title` is a derived cache of the document's first block, written by the client on the same debounce as the update insert. It exists so the notes list is a plain indexed query rather than requiring CRDT decoding in Postgres.
 
 ### `public.note_updates`
 
@@ -135,7 +136,7 @@ Subscribed with `filter: note_id=eq.<id>`, INSERT events only.
 
 ### Client lifecycle
 
-**Open.** Create `Y.Doc`, take `doc.getText('content')`, attach `y-indexeddb`. If online: fetch the note row, apply `snapshot_b64`, then fetch and apply `note_updates where note_id = $1 and id > snapshot_up_to_id` in `id` order. Subscribe. Track `lastSeenId`.
+**Open.** Create `Y.Doc`, attach `y-indexeddb`. If online: fetch the note row, apply `snapshot_b64`, then fetch and apply `note_updates where note_id = $1 and id > snapshot_up_to_id` in `id` order. Subscribe. Track `lastSeenId`.
 
 **Edit.** Buffer Yjs updates. Every 400 ms, collapse the buffer with `Y.mergeUpdates` and insert one row. One row per 400 ms of typing, not one per keystroke.
 
@@ -145,70 +146,51 @@ Subscribed with `filter: note_id=eq.<id>`, INSERT events only.
 
 **Close.** Flush the buffer. Compact if the log exceeds 500 rows.
 
-## Editor: CodeMirror 6 with live preview
+## Editing model
 
-### Why a text editor and not a tree editor
+The Notion model: markdown is how you write, not how the document is stored. Typing `## ` at the start of a block makes it a heading and consumes the `##`. The markers never persist and are never shown.
 
-The requirement is that the user writes markdown syntax, edits it freely, and sees it rendered. The third and second parts together rule out ProseMirror.
+This is what Notion, Linear, Slack canvas, Coda, Confluence, and Google Docs all do. It is also the model with the healthiest collaboration story, because the document is a tree and concurrent formatting edits merge structurally rather than as overlapping character ranges.
 
-In a ProseMirror document a heading is `{type: "heading", attrs: {level: 3}}`. The `###` does not exist. Displaying it means synthesizing a widget decoration, and a widget is not document content: it cannot be selected, edited, or deleted. Backspacing over a synthesized `###` deletes whatever preceded the heading. That fails the "edit it as he pleases" requirement at the first keystroke a user would try.
+### Resolved deviation: the rejected alternative
 
-In CodeMirror the document is a literal string. The `###` is already there. Hiding it is `Decoration.replace({})` over a range that exists, and revealing it is declining to apply the decoration. Nothing is fabricated, so everything is editable.
+An earlier revision of this spec specified CodeMirror 6 with Obsidian-style live preview, where markdown markers persist in the document and are hidden by CSS unless the caret is inside them. That was chosen to satisfy a request for MarkText-style in-place editing, and then reversed in favour of the Notion model.
 
-This is also how MarkText itself works. Its engine (Muya) keeps every marker in the DOM at all times and collapses them with CSS:
+The reversal is recorded rather than erased because the tradeoff is real and may be revisited. What the Notion model gives up: the user cannot see or directly edit the syntax. What it gains: a mature Yjs binding (`y-prosemirror` at 1.43M downloads per week against `y-codemirror.next` at 78k, pre-1.0, last published 2024-06-18), no vendored decoration layer, and immunity to the Peritext failure mode where concurrent marker edits garble formatting (`#` plus `#` producing `##`).
 
-```css
-.mu-hide { display: inline-block; width: 0; height: 0; overflow: hidden; }
-.mu-gray { color: var(--editor-color-30); }
-```
+### Extensions
 
-Moving the caret inserts and deletes nothing. It changes a class name. Obsidian's Live Preview does the equivalent on CodeMirror 6, which is why Obsidian migrated from CodeMirror 5 to 6 in the first place.
+Tiptap 3 with StarterKit, plus TaskList and TaskItem from `@tiptap/extension-list` (they are not in StarterKit), plus `@tiptap/extension-collaboration` and `@tiptap/extension-collaboration-caret`.
 
-### Implementation
+All are MIT. Tiptap open-sourced ten formerly Pro extensions in June 2025, including DragHandle and UniqueID. The still-paid extensions are Comments, version history, and Content AI, none of which are used here.
 
-Port SilverBullet's `client/codemirror/hide_mark.ts` (MIT, actively developed, 5.7k stars, and itself a PWA), which is roughly 110 lines and is itself derived from `ixora` (Apache-2.0). The core:
+### Input rules already cover retyping a block
 
-```ts
-const invisibleDecoration = Decoration.replace({})
+StarterKit ships markdown input rules and, importantly, they convert **existing** blocks, not just new ones.
 
-function isCursorInRange(state, range) {
-  return state.selection.ranges.some(sel => checkRangeOverlap(range, [sel.from, sel.to]))
-}
+`textblockTypeInputRule` matches against the text of the current block from its start to the caret, then calls `setBlockType`, which does not care what the block currently is. So with the caret at the start of an existing `h1`, typing `### ` deletes the marker and converts the block to `h3`, content intact, in either direction across h1 through h6.
 
-// per node in syntaxTree(state):
-if (isCursorInRange(state, [from, to])) return   // caret inside: show markers
-// otherwise replace each mark range with nothing
-```
+Two limits worth knowing:
 
-Parsing comes from `@codemirror/lang-markdown`, which supplies a Lezer syntax tree. Marks handled: `Emphasis`, `StrongEmphasis`, `InlineCode`, `Strikethrough`. Headings need a second short function: caret inside the heading adds a line class, otherwise the `### ` prefix is replaced.
+- It only fires with the caret at the block start.
+- **There is no input rule that removes a heading.** No `^\s$` rule exists, so a user cannot type their way back to a paragraph. This gap alone requires the toolbar below.
+- List and blockquote rules use `wrappingInputRule`, which wraps rather than converts. Typing `> ` at the start of an `h1` yields a blockquote containing an `h1`.
 
-Vendor this code rather than depending on it. `@retronav/ixora` was last published 2023-04-28 and is effectively unmaintained. The code is small, readable, and permissively licensed, which makes copying it the correct call.
+This behaviour is undiscoverable, so it is surfaced in the note empty state.
 
-### Coverage
+### Formatting affordances
 
-For the target scope, almost everything is styling rather than widgets:
+A **persistent formatting bar docked to the bottom of the visual viewport**, not a selection-anchored bubble menu.
 
-**Decoration and CSS only:** headings, bold, italic, inline code, strikethrough, links (hide the brackets and URL, style the label), blockquotes, code blocks with syntax highlighting via Lezer's nested language support, bullet and ordered lists.
+A bubble menu is the wrong primitive on a mobile-first PWA. Tiptap issue 6571 (open, filed 2025-07-07) documents the virtual keyboard opening and the floating toolbar sitting mid-screen rather than docking, on both iOS 18.5 and Android 14. Issue 1806 documents iOS Safari dropping the selection when a format button is tapped. Independently, iOS Safari does not reliably reset `visualViewport.offsetTop` after keyboard dismissal, which breaks `position: fixed`. A docked bar never needs selection-anchored positioning. This is what Obsidian mobile ships.
 
-**One widget:** the task-list checkbox, replacing `[ ]` with a tappable `<input type="checkbox">` whose click dispatches a transaction rewriting `[ ]` to `[x]`. Roughly 40 lines.
+Bar actions are ordinary Tiptap commands: `toggleHeading({ level })`, `toggleBulletList()`, `toggleTaskList()`, `toggleBlockquote()`, `setParagraph()`, and the inline mark toggles.
 
-Images, tables, and horizontal rules are out of scope and remain styled source text.
+Keyboard shortcuts come free with the extensions (`Mod-Alt-1` through `Mod-Alt-6` for headings, `Mod-Alt-0` for paragraph, `Mod-b`, `Mod-i`, and so on). They are worth nothing on mobile but cost nothing to keep.
 
-### Two implementation hazards, both known in advance
+### Markdown export
 
-**Never `display: none` to hide markers.** It breaks caret placement. Use zero-width collapse, the same approach MarkText uses.
-
-**A single `Decoration.replace` spanning multiple lines is atomic in CodeMirror**, so arrow-key entry from below snaps to the range start. Hide multi-line ranges line by line. SilverBullet documents this in a source comment; it is exactly the bug that would otherwise surface in week three.
-
-Additionally, skip full decoration recomputation during IME composition (`tr.isUserEvent("input.type.compose")`) and map existing ranges instead. This matters on mobile keyboards.
-
-### Formatting affordances beyond typing
-
-Typing markdown is the primary interaction, but discoverability needs a floor. A **persistent formatting bar docked to the bottom of the visual viewport**, not a selection-anchored bubble menu.
-
-A bubble menu is the wrong primitive on mobile. Selection-anchored floating toolbars fight the virtual keyboard, and iOS Safari does not reliably reset `visualViewport.offsetTop` after keyboard dismissal, which breaks `position: fixed`. A docked bar never needs selection-anchored positioning. This is what Obsidian mobile ships.
-
-Bar actions insert or toggle the relevant markdown syntax at the selection. Since the document is text, these are ordinary text transactions, not editor commands.
+`@tiptap/markdown` (MIT since 3.7.0) serialises the document for copy and export. This is an export path only, never storage, so its early-release status and known table limitations carry low stakes. Failure to serialise an exotic construct degrades an export; it cannot corrupt a note.
 
 ### German copy
 
@@ -216,7 +198,9 @@ UI copy is German, consistent with the rest of the app. Notes are "Notizen".
 
 ## Awareness and carets
 
-`y-codemirror.next` provides `yCollab(ytext, awareness, { undoManager })`, which bundles remote selection and cursor rendering. It takes a **standard `y-protocols` `Awareness` instance**, so the transport below is unchanged from an editor-agnostic design.
+`CollaborationCaret` renders remote cursors and selections. Reading the 3.28.0 source, its entire use of the `provider` option is `provider.awareness`, so a bare `{ awareness }` object satisfies it. No Hocuspocus provider is required despite what its JSDoc implies.
+
+`@tiptap/y-tiptap` owns the `cursor` awareness field, deduplicates by relative position, and nulls the field on `focusout`. Tab switching therefore clears the local caret for other members without any visibility code.
 
 A **second, separate channel**, topic `awareness:<noteId>`, using **broadcast only**. Separate from the `note_updates` subscription because the two have different lifetimes and failure modes, and carets must tear down without disturbing durable sync.
 
@@ -229,6 +213,10 @@ Self-hosted Realtime enforces `CLIENT_PRESENCE_MAX_CALLS = 5` per `CLIENT_PRESEN
 Architecturally, `y-protocols` awareness already **is** a presence protocol, with its own per-client clock, its own 30 second peer expiry, and its own tombstone mechanism. Running Presence underneath it means two clocks, two lifecycles, and two identity spaces that will disagree. Any bridge reconciling them races the built-in authority, which is how implementations acquire ghost and flapping carets.
 
 Presence remains the right tool for slow-changing membership. It is not used in this feature.
+
+### The member list comes from awareness
+
+`editor.storage.collaborationCaret.users` exposes connected members as `{ clientId, ...user }`. The "who is in this note" indicator reads from there. No second mechanism.
 
 ### Built-in heartbeat: do not reimplement
 
@@ -284,6 +272,10 @@ Inbound handlers receive an `ArrayBuffer` and must wrap it in a `Uint8Array`.
 
 Decode is wrapped: a truncated or malformed update throws inside `applyAwarenessUpdate`, and an unhandled throw in a channel callback is a swallowed error. Catch, surface once, drop the message. The sender's next heartbeat repairs within 15 seconds.
 
+### Decorations and `ySyncPlugin`
+
+Any ProseMirror decoration plugin added later must derive its `DecorationSet` from `state` on every call and never call `.map()`. `DecorationSet.map` does not survive `ySyncPlugin`: widget decorations vanish on the local client when any remote client edits anywhere in the document (`y-prosemirror` issue 49). Stateful decoration plugins are the ones that break; stateless ones compose fine, and ProseMirror unions decorations across plugins so there is no conflict with `CollaborationCaret`.
+
 ### Disconnect and teardown
 
 On `CHANNEL_ERROR`, `TIMED_OUT`, or `CLOSED`: `removeAwarenessStates` for every remote client. Nothing can be heard, so nothing is present. Clearing immediately beats showing 30 seconds of stale ghosts. Re-run the full handshake on the next `SUBSCRIBED`.
@@ -306,9 +298,7 @@ On `visibilitychange` to hidden: stop outbound sends but keep the channel. A two
 
 The board route gains a `Board | Notizen` switch. Desktop shows the note list beside the editor. Mobile makes the list a full screen; tapping a note pushes to the editor, consistent with the existing mobile-first pattern.
 
-`title` is derived client-side from the document's first line and written on the same 400 ms debounce as the update insert. This keeps the notes list a plain indexed query rather than requiring CRDT decoding in Postgres.
-
-There is no separate source view. The document is the source, rendered in place. That was the point.
+`title` is derived client-side from the document's first block and written on the same 400 ms debounce as the update insert. This keeps the notes list a plain indexed query rather than requiring CRDT decoding in Postgres.
 
 ## Offline
 
@@ -328,8 +318,7 @@ apps/web/src/features/notes/
 │   └── notes.ts              Supabase calls, zod parsing at the boundary
 ├── lib/
 │   ├── awareness-channel.ts  broadcast transport for y-protocols awareness
-│   ├── note-doc.ts           Y.Doc lifecycle, log apply, compaction trigger
-│   └── live-preview.ts       CodeMirror decorations, vendored from SilverBullet
+│   └── note-doc.ts           Y.Doc lifecycle, log apply, compaction trigger
 ├── hooks/
 │   ├── use-board-notes.ts
 │   ├── use-note-doc.ts
@@ -342,26 +331,23 @@ apps/web/src/features/notes/
     └── format-bar.tsx
 ```
 
-Layer boundaries per `architecture.md`. Components import hooks, never `api/` or `@supabase/*`. `lib/` holds the Yjs, CodeMirror, and channel plumbing, imported by hooks.
+Layer boundaries per `architecture.md`. Components import hooks, never `api/` or `@supabase/*`. `lib/` holds the Yjs and channel plumbing, imported by hooks.
 
 The awareness channel is the one place touching `supabase` outside `api/`. It is transport, not data access, and belongs in `lib/` alongside the `Y.Doc` lifecycle it serves.
-
-`live-preview.ts` carries a header comment recording its provenance, upstream licence, and the commit it was vendored from.
 
 ## Testing
 
 Unit (Vitest):
-- Apply updates in `id` order reconstructs expected document text.
+- Apply updates in `id` order reconstructs expected document state.
 - Resync from `lastSeenId`.
 - Compacted-while-offline path: `snapshot_up_to_id > lastSeenId` re-applies the snapshot.
 - `Y.mergeUpdates` batching collapses a buffer to one update.
 - Awareness outbound filter sends only when the changed set contains the local `clientID`.
 - Throttle accumulates changed IDs across suppressed events and never drops a removal.
 - `ArrayBuffer` conversion produces exactly `byteLength` bytes with no trailing garbage.
-- Decorations: markers hidden when the caret is outside a construct, revealed when inside, for each supported mark type and heading.
-- Multi-line constructs are decorated line by line, never as one atomic range.
+- Title derivation from the first block, including an empty document.
 
-Convergence property test: apply a set of updates in randomised orders across two docs, assert identical final text. This is the invariant the whole architecture rests on.
+Convergence property test: apply a set of updates in randomised orders across two docs, assert identical final state. This is the invariant the whole architecture rests on.
 
 Integration (`vitest.integration.config.ts`, testcontainers):
 - User A inserts into `note_updates` for user B's note: denied.
@@ -374,7 +360,8 @@ E2E (Playwright):
 - Carets appear in both directions.
 - Late joiner sees existing carets within one round trip.
 - Both contexts edit offline, reconnect, converge without loss.
-- Caret entering a heading reveals `###`; backspacing one marker changes the heading level. This is the requirement that drove the editor choice, so it gets an explicit test.
+- Typing `### ` at the start of an existing `h1` converts it to `h3`.
+- The format bar turns a heading back into a paragraph, the one case input rules cannot express.
 
 ## Operational notes
 
@@ -396,9 +383,9 @@ The limits are raisable by environment variable on the `realtime` service or per
 
 ## Rejected alternatives
 
-**Tiptap 3 with synthesized syntax decorations.** The original plan, reversed. Widget decorations can render a `###` on the active block, but a widget is not document content: it cannot be selected, edited, or deleted, and backspacing over one deletes whatever preceded the block. That fails the core requirement that the user edits markdown freely. There is no npm package doing this and one 0-star GitHub repo. Widget decorations are also `contenteditable=false` atoms, ProseMirror's documented weak spot on Android, so the mechanism sits on its shakiest mobile surface. Rejected as a convincing-looking approximation that breaks at exactly the interaction the feature exists for.
+**CodeMirror 6 with live preview**, where markdown markers persist in the document and are hidden by CSS unless the caret is inside them, as Obsidian and MarkText do. Specified in an earlier revision of this spec and reversed. It genuinely delivers editable markers, and roughly 110 lines of MIT code from SilverBullet implements the core. Rejected in favour of the Notion model on two counts: `y-codemirror.next` is version 0.3.5 published 2024-06-18 at 78k downloads per week against `y-prosemirror`'s 1.43M, pre-1.0, with its main branch targeting an unreleased Yjs v14; and plain-text CRDT merge over markdown can garble concurrent marker edits (Ink and Switch's Peritext documents `#` plus `#` producing `##` and overlapping bold merging to `**The **fox** jumped.**`). See "Resolved deviation" above.
 
-**Tiptap 3 without syntax reveal**, relying on input rules plus a toolbar. Genuinely cheap, and worth knowing that Tiptap input rules already retype an existing block (cursor at block start, type `### `, an h1 becomes an h3). Rejected because it is not the requested editing model.
+**Tiptap with synthesized syntax decorations**, rendering `###` as widget decorations on the active block to imitate live preview without changing the document model. Rejected because widget decorations are not document content: they cannot be selected, edited, or deleted, and backspacing over one deletes whatever preceded the block. It looks like live preview and fails at the first interaction a user would try. There is also no prior art on npm and widgets are `contenteditable=false` atoms, ProseMirror's weak spot on Android.
 
 **Milkdown / Crepe.** ProseMirror-based and markdown-native, but ships a Vue 3 runtime inside a React app at 441 kB gzip. Rejected on bundle and stack coherence.
 
@@ -406,13 +393,13 @@ The limits are raisable by environment variable on the `realtime` service or per
 
 **`pg_crdt`.** Last commit 2025-04-11, zero releases, install questions unanswered since 2024. Supabase's own blog: "pg_crdt has not been released onto the Supabase platform (and it may never be)." Absent from the `supabase/postgres` image, so adopting it means maintaining a forked Postgres image forever. Yjs support was dropped in an April 2025 rewrite to `automerge-c`. Architecturally it provides server-side merge only and no client sync transport. Its own documentation notes the WAL carries a complete document copy per change, which combined with `replica identity full` would broadcast the entire note on every keystroke.
 
-**`y-supabase` and `kevinamick/supabaseprovider`.** Abandoned 2023 and 2024 respectively, both still pre-release, both predating the v2 binary serializer, the presence rate limiter, and current editor bindings. `y-supabase` carries an open correctness issue titled "Updates will overwrite each other" filed the day after its final release. Read for shape; the specific defects they contain are called out inline above.
+**`y-supabase` and `kevinamick/supabaseprovider`.** Abandoned 2023 and 2024 respectively, both still pre-release, both predating the v2 binary serializer, the presence rate limiter, and Tiptap 3. `y-supabase` carries an open correctness issue titled "Updates will overwrite each other" filed the day after its final release. Read for shape; the specific defects they contain are called out inline above.
 
 **Hosted collaboration backends** (Liveblocks, Tiptap Cloud). None can verify a GoTrue JWT; all mint their own token from a secret that cannot live in a browser. They remove provider code but not the backend requirement.
 
-**Hocuspocus.** MIT, actively maintained, `onAuthenticate` can verify the Supabase JWT against the JWKS published since commit `022159a`, and `extension-database` is roughly 15 lines against the existing Postgres. Two to three days. Rejected because it is a second always-on service, violating the no-bespoke-backend invariant in `CLAUDE.md`. Reconsider only alongside an explicit decision to change that rule, recorded as a resolved deviation in `architecture.md`. Note it is also ProseMirror-shaped, so it no longer fits the chosen editor.
+**Hocuspocus.** MIT, actively maintained, `onAuthenticate` can verify the Supabase JWT against the JWKS published since commit `022159a`, and `extension-database` is roughly 15 lines against the existing Postgres. Two to three days. Rejected because it is a second always-on service, violating the no-bespoke-backend invariant in `CLAUDE.md`. Reconsider only alongside an explicit decision to change that rule, recorded as a resolved deviation in `architecture.md`.
 
-**Automerge and Loro.** Automerge parses the benchmark document in 1805 ms against Yjs's 39 ms, which is a visible stall on mobile. Loro is technically excellent and parses fastest, but has no CodeMirror binding, which would have to be written.
+**Automerge and Loro.** Automerge parses the benchmark document in 1805 ms against Yjs's 39 ms, which is a visible stall on mobile, and its ProseMirror binding self-describes as beta. Loro is technically excellent and parses fastest, but has no Tiptap binding, which would have to be written.
 
 **ElectricSQL.** Read-path only since the July 2024 rewrite, with no CRDT layer, and requires a separate stateful Elixir container. That is the bespoke backend, for half a solution.
 
@@ -422,15 +409,7 @@ The limits are raisable by environment variable on the `realtime` service or per
 
 ## Risks
 
-**`y-codemirror.next` maturity.** This is the largest risk in the design. Version 0.3.5, published **2024-06-18**, roughly 78k downloads per week against `y-prosemirror`'s 1.43M. Pre-1.0, and its main branch now targets an unreleased Yjs v14. Open issues include desync when not attached to a view (#36), CRLF position mismatches (#35), and nested `EditorView.update` errors (#39).
-
-Mitigations: normalise line endings on ingest, which pre-empts #35. Audit the package before committing to it. It is small, MIT, and by the Yjs author, so maintaining a fork is realistic if it stalls further. The convergence property test is the guard that would catch a regression.
-
-**Concurrent marker edits can garble formatting.** Documented by Ink and Switch's Peritext as an inherent property of plain-text CRDTs over markdown, not a Yjs defect. Two people bolding overlapping ranges merge to `**The **fox** jumped.**`; two people adding `#` to the same line produce `##`.
-
-Requires concurrent edits to the same few characters, so it is rare with two users on short notes. It is always visible and always fixable by deleting a character, and the document can never become unparseable since markdown has no invalid states. Accepted as a real but narrow cost of markdown-as-source-of-truth.
-
-**Provider ownership.** No maintained Yjs-Supabase provider exists, so this code is owned outright. Mitigated by keeping it small (the awareness layer is roughly 80 lines), by the protocol being fully specified above, and by the convergence property test.
+**Provider ownership.** No maintained Yjs-Supabase provider exists, so this code is owned outright. This is now the largest risk in the design, the editor-layer risks having been removed by the Notion-model decision. Mitigated by keeping it small (the awareness layer is roughly 80 lines), by the protocol being fully specified above, and by the convergence property test.
 
 **Latency perception.** Remote edits at 100 to 300 ms will not feel like Google Docs. If it grates, broadcast can be added as a fast path with no schema change.
 
@@ -438,16 +417,17 @@ Requires concurrent edits to the same few characters, so it is rare with two use
 
 **supabase-js serializer behaviour.** The `ArrayBuffer` versus `ArrayBufferView` asymmetry is undocumented behaviour that could change. The unit test asserting exact byte length is the guard.
 
-**Loss of structured queries.** With a markdown string, asking "which task items are checked" means re-parsing with Lezer rather than walking a typed tree. Acceptable for simple notes, and markdown text is in fact the friendlier format to expose through the existing MCP server.
+**Markdown export fidelity.** `@tiptap/markdown` is comparatively young and documents table limitations. Low stakes: this is an export path, not storage, so a serialisation gap degrades a copy rather than corrupting a note.
+
+**Mobile format bar positioning.** The docked bar avoids the known bubble-menu defects, but `visualViewport` handling on iOS Safari is its own source of bugs. Budget real device testing rather than emulator testing.
 
 ## Implementation order
 
 1. Migration: both tables, RLS policies, `compact_note`, realtime publication. Then `pnpm db:reset` and `pnpm db:types`.
 2. `api/notes.ts` with zod boundaries, plus integration tests for RLS by impersonation.
-3. `lib/note-doc.ts`: `Y.Doc` and `Y.Text` lifecycle, log apply, resync, compaction. Unit tests including the convergence property test.
+3. `lib/note-doc.ts`: `Y.Doc` lifecycle, log apply, resync, compaction. Unit tests including the convergence property test.
 4. Hooks, query keys, offline allowlist and mutation defaults registration.
-5. CodeMirror editor with `yCollab`. Two-tab convergence check.
-6. `lib/live-preview.ts`: vendor and adapt the decoration layer. Marks first, then headings, then lists and quotes, then the checkbox widget.
-7. `lib/awareness-channel.ts` plus carets. Late-joiner and disconnect tests.
-8. Notes list, board tab, mobile navigation, docked format bar.
-9. E2E including the offline-both-edit case and the marker-editing case.
+5. Tiptap editor with collaboration. Two-tab convergence check.
+6. `lib/awareness-channel.ts` plus carets. Late-joiner and disconnect tests.
+7. Notes list, board tab, mobile navigation, docked format bar, markdown export.
+8. E2E including the offline-both-edit case.
