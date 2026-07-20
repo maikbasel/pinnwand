@@ -143,6 +143,13 @@ export class BoardDetailPage {
     await input.pressSequentially(newTitle);
     // The title commits inline on Enter (decoupled from Speichern).
     await input.press("Enter");
+    // Wait for the committed title to land back in the sheet before returning.
+    // The field renders the task as the sheet currently knows it, and Speichern
+    // re-sends that same value, so clicking it while this still reads the old
+    // title writes the pre-edit name straight back over the rename.
+    await expect(
+      this.sheet.getByRole("button", { name: newTitle, exact: true })
+    ).toBeVisible();
   }
 
   // Picks a column in the sheet's Status ToggleGroup. Each item is a toggle
@@ -170,7 +177,16 @@ export class BoardDetailPage {
   // directly, which fires React's onClick. The caller's outcome assertion (card
   // moved / deleted) still gates that the action actually took effect.
   private async clickSheetAction(name: string): Promise<void> {
-    await this.sheet.getByRole("button", { name }).dispatchEvent("click");
+    const button = this.sheet.getByRole("button", { name });
+    // dispatchEvent bypasses Playwright's actionability checks, so it fires
+    // React's onClick even while the button is disabled. Speichern is disabled
+    // whenever a task mutation is in flight, including the inline title commit
+    // that editTitle triggers on Enter, and the handler bails out on that same
+    // busy flag. Dispatching into that window silently does nothing and leaves
+    // the sheet open. Waiting for the enabled state restores the one guarantee
+    // a real click would have given us.
+    await expect(button).toBeEnabled();
+    await button.dispatchEvent("click");
   }
 }
 
