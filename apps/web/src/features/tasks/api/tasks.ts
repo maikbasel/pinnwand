@@ -119,7 +119,11 @@ export async function createTask(
 
 const UpdateTaskInput = z.object({
   taskId: z.uuid(),
-  title: z.string().trim().min(1).max(200),
+  // Optional so a caller that does not own the title can leave it alone. The
+  // detail sheet's inline field commits the title on its own; Save omits it
+  // rather than re-sending a value that may lag behind that commit and write
+  // the pre-edit name back over a rename.
+  title: z.string().trim().min(1).max(200).optional(),
   description: z.string().max(5000),
   priority: TaskPrioritySchema,
   dueDate: z.string().nullable(),
@@ -132,7 +136,7 @@ export async function updateTask(
   const { data, error } = await supabase
     .from("tasks")
     .update({
-      title: parsed.title,
+      ...(parsed.title === undefined ? {} : { title: parsed.title }),
       description: parsed.description,
       priority: parsed.priority,
       due_date: parsed.dueDate,

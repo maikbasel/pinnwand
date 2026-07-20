@@ -137,7 +137,11 @@ export function TaskDetailSheet({
   }
 
   async function save(): Promise<void> {
-    const title = mode.kind === "create" ? form.title.trim() : mode.task.title;
+    // Create owns the title; in edit mode the inline field already committed it,
+    // so Save leaves it alone. Re-sending it here would push whatever the sheet
+    // last read back to the server, which right after an inline rename is still
+    // the old name and silently undoes the rename.
+    const title = mode.kind === "create" ? form.title.trim() : null;
     if (busy || title === "") {
       return;
     }
@@ -146,7 +150,7 @@ export function TaskDetailSheet({
       if (mode.kind === "create") {
         await createTask.mutateAsync({
           column: form.column,
-          title,
+          title: title ?? "",
           description: form.description,
           priority: form.priority,
           dueDate,
@@ -154,7 +158,6 @@ export function TaskDetailSheet({
       } else {
         await updateTask.mutateAsync({
           taskId: mode.task.id,
-          title,
           description: form.description,
           priority: form.priority,
           dueDate,

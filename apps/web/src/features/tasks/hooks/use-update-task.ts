@@ -6,7 +6,8 @@ import type { Task } from "../types";
 
 export type UpdateTaskVars = {
   taskId: string;
-  title: string;
+  // Omit to leave the title untouched; the detail sheet's inline field owns it.
+  title?: string;
   description: string;
   priority: TaskPriorityId;
   dueDate: string | null;
@@ -36,7 +37,7 @@ export function useUpdateTask(boardId: string) {
     mutationFn: (vars) =>
       updateTask({
         taskId: vars.taskId,
-        title: vars.title,
+        ...(vars.title === undefined ? {} : { title: vars.title }),
         description: vars.description,
         priority: vars.priority,
         dueDate: vars.dueDate,
@@ -49,7 +50,7 @@ export function useUpdateTask(boardId: string) {
           task.id === vars.taskId
             ? {
                 ...task,
-                title: vars.title,
+                ...(vars.title === undefined ? {} : { title: vars.title }),
                 description: vars.description,
                 priority: vars.priority,
                 dueDate: vars.dueDate,

@@ -143,10 +143,12 @@ export class BoardDetailPage {
     await input.pressSequentially(newTitle);
     // The title commits inline on Enter (decoupled from Speichern).
     await input.press("Enter");
-    // Wait for the committed title to land back in the sheet before returning.
-    // The field renders the task as the sheet currently knows it, and Speichern
-    // re-sends that same value, so clicking it while this still reads the old
-    // title writes the pre-edit name straight back over the rename.
+    // Wait for that commit to render before handing back. Speichern is disabled
+    // while the write is in flight, and clickSheetAction dispatches its click
+    // rather than performing one, so a caller that clicks straight after Enter
+    // can fire into the disabled window and have the action dropped, leaving
+    // the sheet open. Seeing the new title back in the field means the write
+    // settled and the button is live again.
     await expect(
       this.sheet.getByRole("button", { name: newTitle, exact: true })
     ).toBeVisible();

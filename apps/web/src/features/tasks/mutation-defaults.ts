@@ -32,7 +32,8 @@ export type CreateTaskMutation = {
 export type UpdateTaskMutation = {
   op: "update";
   taskId: string;
-  title: string;
+  // Omitted when the caller does not own the title (see UpdateTaskInput).
+  title?: string;
   description: string;
   priority: TaskPriorityId;
   dueDate: string | null;
