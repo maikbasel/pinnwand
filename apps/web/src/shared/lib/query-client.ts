@@ -18,6 +18,7 @@ const AUTH_ERROR_PATTERN = /JWT|auth/i;
 const OFFLINE_QUERY_ROOTS: ReadonlySet<string> = new Set([
   "boards",
   "tasks",
+  "notes",
   "board-members",
   // The viewer's own profile row (display name). Per-user buster, not shared.
   "profile",
@@ -55,7 +56,7 @@ export function shouldDehydrateOfflineQuery(query: Query): boolean {
 // `[root, op, boardId]` shape and must survive an offline app restart. Board
 // create/join/rename/delete run network-only (they need the server), are never
 // paused, and so never reach persistence.
-const DURABLE_MUTATION_ROOTS: ReadonlySet<string> = new Set(["tasks"]);
+const DURABLE_MUTATION_ROOTS: ReadonlySet<string> = new Set(["tasks", "notes"]);
 
 /**
  * Allowlist of what gets persisted to IndexedDB for offline writes. Only paused

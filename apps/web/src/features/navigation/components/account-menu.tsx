@@ -7,6 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/shared/components/ui/dropdown-menu";
+import { colorForUser } from "@/shared/lib/user-color";
 import { useAccountIdentity } from "../lib/account-identity";
 import {
   ACCOUNT_LABEL,
@@ -34,7 +35,7 @@ const COMPACT_TRIGGER_CLASSNAME =
  * forbidden here.
  */
 export function AccountMenu({ compact = false }: Props) {
-  const { identityName, identityInitials, identityEmail } =
+  const { identityId, identityName, identityInitials, identityEmail } =
     useAccountIdentity();
   const signOut = useSignOut();
 
@@ -46,7 +47,10 @@ export function AccountMenu({ compact = false }: Props) {
         data-testid="account-menu-trigger"
       >
         <Avatar className="size-8">
-          <AvatarFallback className="bg-primary font-semibold text-primary-foreground ring-0">
+          <AvatarFallback
+            className="font-semibold text-white ring-0"
+            style={{ backgroundColor: colorForUser(identityId) }}
+          >
             {identityInitials}
           </AvatarFallback>
         </Avatar>

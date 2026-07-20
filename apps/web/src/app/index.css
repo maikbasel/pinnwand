@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "@fontsource-variable/inter";
+@plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -218,4 +219,102 @@ body {
 }
 .pinnwand-logo-mono .pinnwand-glyph {
   fill: currentColor;
+}
+
+/* Collaboration carets (Notizen editor). @tiptap/extension-collaboration-caret
+   ships no CSS of its own — it renders `collaboration-carets__caret` /
+   `collaboration-carets__label` with only inline border-color /
+   background-color (confirmed against the installed package:
+   node_modules/@tiptap/extension-collaboration-caret/dist/index.js, the
+   addOptions().render default). The selection decoration comes from
+   @tiptap/y-tiptap's defaultSelectionBuilder, which uses the
+   `ProseMirror-yjs-selection` class and already appends a `70` alpha suffix
+   to the inline background-color. Scoped to the editor's `.prose` container
+   so these rules never leak outside the Notizen surface. */
+.prose .collaboration-carets__caret {
+  position: relative;
+  margin-right: -1px;
+  margin-left: -1px;
+  word-break: normal;
+  pointer-events: none;
+  border-right: 2px solid;
+  border-left: 2px solid;
+}
+
+.prose .collaboration-carets__label {
+  position: absolute;
+  top: -1.4em;
+  left: -2px;
+  padding: 0.05rem 0.35rem;
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 600;
+  line-height: normal;
+  color: #fff;
+  white-space: nowrap;
+  user-select: none;
+  border-radius: 0.25rem;
+}
+
+.prose .ProseMirror-yjs-selection {
+  border-radius: 0.15rem;
+}
+
+/* Task lists (Notizen editor). @tailwindcss/typography has no task-list
+   styles of its own, and @tiptap/extension-list's TaskItem renders through a
+   custom addNodeView that skips its own toDOM output, so the live <li> never
+   gets a `data-type` attribute (confirmed by rendering the extension in
+   jsdom: only the wrapping <ul> carries `data-type="taskList"`). Scope on
+   the ul instead of `li[data-type="taskItem"]` so nested task lists match
+   too. Kill the prose bullet/indent, then lay the checkbox <label> and text
+   <div> out inline. */
+.prose ul[data-type="taskList"] {
+  padding-left: 0;
+  list-style: none;
+}
+
+.prose ul[data-type="taskList"] li {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.prose ul[data-type="taskList"] li > label {
+  flex: 0 0 auto;
+  margin-top: 0.2em;
+}
+
+.prose ul[data-type="taskList"] li > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Prose gives paragraphs a top/bottom margin, which inside a task item pushes
+   the text down and out of line with the checkbox. Zero it so the first text
+   line sits level with the checkbox. */
+.prose ul[data-type="taskList"] li > div > p {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+/* Blockquotes (Notizen editor). @tailwindcss/typography injects curly
+   quotation marks around blockquote text via ::before/::after content. That is
+   not a common convention and reads oddly here; the left border plus italic is
+   the cue. Strip the injected quote marks. */
+.prose blockquote {
+  quotes: none;
+}
+.prose blockquote p:first-of-type::before,
+.prose blockquote p:last-of-type::after {
+  content: none;
+}
+
+/* Code blocks (Notizen editor), dark mode only. Typography's dark preset
+   sets --tw-prose-invert-pre-bg to a 50% black overlay, which barely differs
+   from the app's own near-black --background token and reads as plain text
+   instead of a block. Pin it to the --card surface, the same token the rest
+   of the app uses for an elevated surface above the page background. */
+.dark .prose pre {
+  color: var(--card-foreground);
+  background-color: var(--card);
 }
