@@ -17,6 +17,11 @@ export const COMPACT_THRESHOLD = 500;
 /** Debounce between local edits and one durable append. */
 export const UPDATE_FLUSH_MS = 400;
 
+/** Name of the y-indexeddb database mirroring one note's document. */
+export function noteDocDatabaseName(noteId: string): string {
+  return `note:${noteId}`;
+}
+
 export function applyUpdates(doc: Doc, updates: NoteUpdate[]): number {
   let highest = 0;
   for (const entry of updates) {

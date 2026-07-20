@@ -1,11 +1,21 @@
 import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { ConfirmSheet } from "@/shared/components/confirm-sheet";
 import { Button } from "@/shared/components/ui/button";
+import { Skeleton } from "@/shared/components/ui/skeleton";
 import { useBoardNotes } from "../hooks/use-board-notes";
 import { useCreateNote } from "../hooks/use-create-note";
 import { useDeleteNote } from "../hooks/use-delete-note";
 import { useNotesRealtime } from "../hooks/use-notes-realtime";
+import type { Note } from "../types";
 import { NoteEditor } from "./note-editor";
+
+const SKELETON_ROWS = [0, 1, 2];
+
+const DELETE_NOTE_TITLE = "Notiz löschen?";
+const DELETE_NOTE_BUTTON = "Endgültig löschen";
+const DELETE_NOTE_CONFIRM = (title: string): string =>
+  `„${title}“ wird für alle Mitglieder gelöscht. Das lässt sich nicht rückgängig machen.`;
 
 type NotesPanelProps = {
   boardId: string;
@@ -18,9 +28,37 @@ export function NotesPanel({ boardId, userName, userColor }: NotesPanelProps) {
   const { createNote, isPending: isCreating } = useCreateNote(boardId);
   const { deleteNote } = useDeleteNote(boardId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Note | null>(null);
   useNotesRealtime(boardId);
 
   const selected = notes.find((note) => note.id === selectedId) ?? null;
+
+  // Both mutations run networkMode "always", so a failure rejects rather than
+  // pausing. The global mutationCache onError renders the toast; catching here
+  // keeps the rejection from escaping the handler as an unhandled rejection.
+  const onCreate = (): void => {
+    createNote().then(
+      (note) => setSelectedId(note.id),
+      () => {
+        // Reported by the global mutation error toast.
+      }
+    );
+  };
+
+  const onConfirmDelete = (): void => {
+    const note = pendingDelete;
+    setPendingDelete(null);
+    if (!note) {
+      return;
+    }
+    if (note.id === selectedId) {
+      setSelectedId(null);
+    }
+    deleteNote(note.id).catch(() => {
+      // Reported by the global mutation error toast; the optimistic removal is
+      // rolled back by the mutation's own onError.
+    });
+  };
 
   if (isError) {
     return (
@@ -32,9 +70,11 @@ export function NotesPanel({ boardId, userName, userColor }: NotesPanelProps) {
 
   if (isPending) {
     return (
-      <p className="px-4 py-6 text-muted-foreground text-sm">
-        Notizen werden geladen…
-      </p>
+      <div className="flex flex-col gap-2 px-3 py-3">
+        {SKELETON_ROWS.map((row) => (
+          <Skeleton className="h-9 w-full rounded-lg" key={row} />
+        ))}
+      </div>
     );
   }
 
@@ -50,10 +90,7 @@ export function NotesPanel({ boardId, userName, userColor }: NotesPanelProps) {
           <Button
             aria-label="Notiz erstellen"
             disabled={isCreating}
-            onClick={async () => {
-              const note = await createNote();
-              setSelectedId(note.id);
-            }}
+            onClick={onCreate}
             size="icon"
             variant="ghost"
           >
@@ -81,12 +118,7 @@ export function NotesPanel({ boardId, userName, userColor }: NotesPanelProps) {
                 </Button>
                 <Button
                   aria-label={`${note.title} löschen`}
-                  onClick={async () => {
-                    if (note.id === selectedId) {
-                      setSelectedId(null);
-                    }
-                    await deleteNote(note.id);
-                  }}
+                  onClick={() => setPendingDelete(note)}
                   size="icon"
                   variant="ghost"
                 >
@@ -126,6 +158,19 @@ export function NotesPanel({ boardId, userName, userColor }: NotesPanelProps) {
           </p>
         </section>
       )}
+      <ConfirmSheet
+        confirmLabel={DELETE_NOTE_BUTTON}
+        confirmTestId="confirm-delete-note"
+        description={DELETE_NOTE_CONFIRM(pendingDelete?.title ?? "")}
+        onConfirm={onConfirmDelete}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingDelete(null);
+          }
+        }}
+        open={pendingDelete !== null}
+        title={DELETE_NOTE_TITLE}
+      />
     </div>
   );
 }

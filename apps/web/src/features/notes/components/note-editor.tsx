@@ -4,6 +4,7 @@ import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useEffect } from "react";
+import { Skeleton } from "@/shared/components/ui/skeleton";
 import { useNoteDoc } from "../hooks/use-note-doc";
 import { useSetNoteTitle } from "../hooks/use-set-note-title";
 import { deriveTitle } from "../lib/title";
@@ -71,13 +72,23 @@ export function NoteEditor({
     );
   }
 
+  if (status === "loading") {
+    // The editor view is deliberately not mounted while hydrating. The local
+    // update listener is only attached once the durable log has been replayed,
+    // so anything typed before that would live in the Y.Doc without ever
+    // reaching note_updates — invisible to every other member.
+    return (
+      <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 py-3">
+        <Skeleton className="h-7 w-2/3" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-11/12" />
+        <Skeleton className="h-4 w-4/5" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {status === "loading" ? (
-        <p className="px-4 py-6 text-muted-foreground text-sm">
-          Notiz wird geladen…
-        </p>
-      ) : null}
       <FormatBar editor={editor} />
       <EditorContent
         // Mobile pb-14 reserves space for the fixed toolbar (~44px) docked

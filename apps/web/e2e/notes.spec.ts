@@ -10,6 +10,8 @@ const NOTES_TAB_LABEL = "Notizen";
 const CREATE_NOTE_LABEL = "Notiz erstellen";
 const NOTE_EDITOR_LABEL = "Notiz bearbeiten";
 const PARAGRAPH_LABEL = "Absatz";
+const UNTITLED_NOTE = "Unbenannte Notiz";
+const CANCEL_LABEL = "Abbrechen";
 const REALTIME_TIMEOUT_MS = 20_000;
 const OFFLINE_MERGE_TIMEOUT_MS = 30_000;
 
@@ -155,6 +157,48 @@ test.describe("Notizen", () => {
       );
       await returnToNotesList(page);
       await expect(noteListEntry(page, "Sprintplanung")).toBeVisible();
+    } finally {
+      await adminClient.from("boards").delete().eq("created_by", owner.userId);
+      await owner.cleanup();
+    }
+  });
+
+  test("deleting a note asks for confirmation first", async ({
+    page,
+    boardsPage,
+    boardDetailPage,
+    signInAs,
+  }) => {
+    const owner = await signInAs(page, "Alice");
+    const boardName = `E2E Notes ${Date.now()}`;
+
+    try {
+      await boardsPage.createBoard(boardName);
+      await expect(boardDetailPage.heading(boardName)).toBeVisible();
+      await openNotesTab(page);
+      await createNote(page);
+      // Creating selects the new note, which on mobile pushes the editor over
+      // the list. Waiting for the editor (rendered only once the document has
+      // hydrated) keeps `returnToNotesList` from racing that navigation.
+      await expect(noteEditor(page)).toBeVisible();
+      await returnToNotesList(page);
+
+      const entry = noteListEntry(page, UNTITLED_NOTE);
+      await expect(entry).toBeVisible();
+
+      // Dismissing the confirmation keeps the note: deletion is destructive
+      // for every board member, so the trash button alone must not commit it.
+      await page
+        .getByRole("button", { name: `${UNTITLED_NOTE} löschen` })
+        .click();
+      await page.getByRole("button", { name: CANCEL_LABEL }).click();
+      await expect(entry).toBeVisible();
+
+      await page
+        .getByRole("button", { name: `${UNTITLED_NOTE} löschen` })
+        .click();
+      await page.getByTestId("confirm-delete-note").click();
+      await expect(entry).toBeHidden();
     } finally {
       await adminClient.from("boards").delete().eq("created_by", owner.userId);
       await owner.cleanup();

@@ -4,6 +4,10 @@ import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { seedSessionFromStorage } from "@/features/auth";
+// Deliberately not through the feature's index.ts: that barrel also exports
+// NotesPanel, which pulls Tiptap and Yjs into the entry chunk instead of
+// leaving them in the lazily-loaded board route. The mutation defaults must be
+// registered here, before the persister resumes paused mutations.
 import { registerNoteMutationDefaults } from "@/features/notes/mutation-defaults";
 import { registerTaskMutationDefaults } from "@/features/tasks";
 import {

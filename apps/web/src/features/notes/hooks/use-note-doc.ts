@@ -9,10 +9,28 @@ import { supabase } from "@/shared/lib/supabase";
 import { NOTE_MUTATION_KEYS } from "../api/notes";
 import { connectAwareness } from "../lib/awareness-channel";
 import { fromBase64 } from "../lib/bytes";
-import { NoteSync } from "../lib/note-doc";
+import { NoteSync, noteDocDatabaseName } from "../lib/note-doc";
 import type { ResumableNoteMutation } from "../mutation-defaults";
 
 export type NoteDocStatus = "loading" | "ready" | "error";
+
+/**
+ * Placeholder returned for the renders before the effect installs the real
+ * handle. Module-level so its identity is stable: it feeds `useEditor`'s
+ * dependency array, and a fresh Doc per render would rebuild the editor on
+ * every one of them.
+ */
+const PLACEHOLDER_DOC = new Doc();
+const PLACEHOLDER_AWARENESS = new Awareness(PLACEHOLDER_DOC);
+// Awareness starts a 3s liveness interval in its constructor. Nothing consumes
+// this instance (the editor view only mounts once the real handle is ready), so
+// the timer would run for the lifetime of the app for nothing.
+PLACEHOLDER_AWARENESS.destroy();
+const PLACEHOLDER_HANDLE: NoteDocHandle = {
+  doc: PLACEHOLDER_DOC,
+  awareness: PLACEHOLDER_AWARENESS,
+  status: "loading",
+};
 
 export type NoteDocHandle = {
   doc: Doc;
@@ -39,7 +57,10 @@ export function useNoteDoc(noteId: string, boardId: string): NoteDocHandle {
     }
     const doc = new Doc();
     const awareness = new Awareness(doc);
-    const persistence = new IndexeddbPersistence(`note:${noteId}`, doc);
+    const persistence = new IndexeddbPersistence(
+      noteDocDatabaseName(noteId),
+      doc
+    );
     setHandle({ doc, awareness, status: "loading" });
 
     const onError = (error: Error): void => {
@@ -140,10 +161,5 @@ export function useNoteDoc(noteId: string, boardId: string): NoteDocHandle {
     };
   }, [noteId, boardId, queryClient]);
 
-  if (handle) {
-    return handle;
-  }
-  // Stable placeholder for the first render before the effect runs.
-  const doc = new Doc();
-  return { doc, awareness: new Awareness(doc), status: "loading" };
+  return handle ?? PLACEHOLDER_HANDLE;
 }

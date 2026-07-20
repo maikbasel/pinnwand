@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { deleteNote, NOTE_KEYS, NOTE_MUTATION_KEYS } from "../api/notes";
+import { noteDocDatabaseName } from "../lib/note-doc";
 import type { Note } from "../types";
 
 export function useDeleteNote(boardId: string): {
@@ -21,6 +22,13 @@ export function useDeleteNote(boardId: string): {
         previous.filter((note) => note.id !== noteId)
       );
       return { previous };
+    },
+    onSuccess: (_result, noteId) => {
+      // The y-indexeddb mirror of a deleted note is dead weight on the device
+      // and nothing else ever removes it. The request queues behind any open
+      // connection (the editor's, if the note was open) and completes when that
+      // connection closes on unmount.
+      indexedDB.deleteDatabase(noteDocDatabaseName(noteId));
     },
     onError: (_error, _noteId, context) => {
       if (context) {
