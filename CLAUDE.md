@@ -261,7 +261,7 @@ Execute simultaneously when operations have no shared dependencies — e.g. read
   - `priority` enum: `niedrig | mittel | hoch`.
   - `position`: fractional index for drag-reorder within a column (write the midpoint between neighbours).
 - **task_assignees**: `(task_id, user_id) PK`. Many-to-many **Verantwortliche**, assigned from board members.
-- **note** (Notiz): `id, board_id, title, snapshot_b64, snapshot_up_to_id, created_by, created_at, updated_at`. Board-scoped collaborative document backed by a Yjs CRDT. Editor is Tiptap 3 on a `Y.XmlFragment`; markdown is an input shortcut and an export format, never the stored form.
+- **note** (Notiz): `id, board_id, title, snapshot_b64, snapshot_up_to_id, created_by, created_at, updated_at`. Board-scoped collaborative document backed by a Yjs CRDT. Editor is Tiptap 3 on a `Y.XmlFragment`; markdown is an input shortcut only, never the stored form and not an export format (export was dropped as a goal).
 - **note_updates**: append-only log of Yjs updates, `(id bigserial, note_id, update_b64, created_at)`. Both the durable store and the sync transport: clients subscribe to inserts via `postgres_changes` instead of a separate broadcast path. Compacted into `notes.snapshot_b64` by the SECURITY DEFINER `compact_note` RPC past 500 rows, which locks the note row (`for update`) so a lagging concurrent caller cannot move the snapshot pointer backward. A trigger rejects client writes to the snapshot columns, so the RPC is the only path to them.
 
 ### Key invariants
