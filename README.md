@@ -6,7 +6,8 @@
 <p align="center">
   Shared Kanban task boards in a mobile-first PWA. Create a board, share it with
   a join code, and track tasks across four fixed columns with priorities and
-  multiple assignees, synced in real time.
+  multiple assignees, synced in real time. Each board also carries
+  collaborative notes.
 </p>
 
 <p align="center">
@@ -21,7 +22,7 @@
   <img src="https://img.shields.io/badge/Tailwind_CSS-4-38bdf8?logo=tailwindcss&logoColor=white" alt="Tailwind CSS 4" />
   <img src="https://img.shields.io/badge/Supabase-self--hosted-3ecf8e?logo=supabase&logoColor=white" alt="Supabase" />
   <img src="https://img.shields.io/badge/PWA-offline--first-5a0fc8?logo=pwa&logoColor=white" alt="PWA" />
-  <img src="https://img.shields.io/badge/license-UNLICENSED-lightgrey" alt="License" />
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT" />
 </p>
 
 ## Features
@@ -32,10 +33,14 @@
   and one or more assignees.
 - **Drag and drop** between columns and reordering within a column, applied
   optimistically and synced across members in real time.
+- **Notes** per board, written in a rich-text editor with markdown shortcuts
+  (type `## ` for a heading). Members edit the same note together with live
+  cursors in their own colour, and concurrent edits merge without loss, even
+  when two people wrote offline.
 - **Passwordless sign-in** by magic link or 6-digit OTP. Self-serve signup is
   disabled; an operator provisions users.
 - **Installable PWA** that works offline: boards render from cache on a cold
-  offline launch, and task edits queue and replay on reconnect.
+  offline launch, and task and note edits queue and replay on reconnect.
 
 ## Tech stack
 
@@ -45,6 +50,7 @@
 | UI          | shadcn/ui (Base UI), theme [Modern Minimal](https://tweakcn.com/editor/theme?theme=modern-minimal) |
 | Data / state| TanStack Query, TanStack Router (file-based)                    |
 | Drag & drop | dnd-kit                                                        |
+| Notes       | Tiptap 3 (ProseMirror) with Yjs CRDT sync over Supabase Realtime |
 | Offline     | `react-query-persist-client` over an `idb-keyval` persister    |
 | Backend     | Self-hosted Supabase (Postgres, Auth, Realtime)                |
 | Tooling     | Ultracite (Biome) for lint/format, Vitest, Playwright          |
@@ -102,15 +108,17 @@ on the `public.profiles` row; signup is disabled by design.
 ## Project structure
 
 ```
-src/
-├── app/                 Router, entry shell, theme, env parsing. No business logic.
+apps/web/                 The Vite PWA
+├── src/app/             Router, entry shell, theme, env parsing. No business logic.
 │   └── routes/          File-based TanStack routes (routeTree.gen.ts is generated)
-├── features/<name>/     Vertical slices: components → hooks → api, with a public index.ts
-└── shared/              Cross-feature primitives (ui/, lib/, generated database types)
-supabase/migrations/     Append-only SQL migrations (RLS enabled with each table)
-docker/                  Dockerfiles, kong + Postgres init config, Caddyfile
-e2e/                     Playwright specs, page objects, and helpers
-docs/                    Deployment guide and design specs
+├── src/features/<name>/ Vertical slices: components → hooks → api, with a public index.ts
+├── src/shared/          Cross-feature primitives (ui/, lib/, hooks/)
+└── e2e/                 Playwright specs, page objects, and helpers
+apps/mcp/                 Remote MCP connector server (verifies the caller's JWT, acts as that user)
+packages/contracts/       @pinnwand/contracts: generated database types + fixed column constants
+supabase/migrations/      Append-only SQL migrations (RLS enabled with each table)
+docker/                   Dockerfiles, kong + Postgres init config, Caddyfile
+docs/                     Deployment guide and design specs
 ```
 
 Layer boundaries and conventions live in [`.claude/rules/`](.claude/rules) and
@@ -138,7 +146,7 @@ pnpm test           # Vitest unit tests
 pnpm db:migration:new <name>   # Create a migration under supabase/migrations/
 pnpm db:push                   # Apply pending migrations to the dev database
 pnpm db:reset                  # Drop and re-apply every migration
-pnpm db:types                  # Regenerate src/shared/types/database.ts
+pnpm db:types                  # Regenerate packages/contracts/src/database.ts
 
 # End-to-end
 pnpm e2e            # Build and run the sealed Playwright stack (docker-compose.e2e.yml)
@@ -181,3 +189,7 @@ Read [`CLAUDE.md`](CLAUDE.md) for the architecture and invariants, and
 [`.claude/rules/`](.claude/rules) for the detailed conventions (security,
 migrations, TanStack Query, PWA, and more). Lint and formatting run
 automatically; keep `pnpm check` green before opening a change.
+
+## License
+
+[MIT](LICENSE) © Maik Basel

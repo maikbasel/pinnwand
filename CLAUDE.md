@@ -127,7 +127,7 @@ apps/web/                ← the Vite PWA (was the repo root)
 │   │   ├── env.ts       ← zod-parsed import.meta.env
 │   │   ├── index.css    ← Tailwind + theme tokens (Modern Minimal)
 │   │   └── main.tsx     ← Providers + router bootstrap
-│   ├── features/<name>/ ← Vertical slice (auth, boards, members, tasks, appearance, navigation, profile)
+│   ├── features/<name>/ ← Vertical slice (auth, boards, members, notes, tasks, appearance, navigation, profile)
 │   │   ├── components/  ← React UI, no Supabase imports
 │   │   ├── hooks/       ← TanStack Query hooks that orchestrate use cases
 │   │   ├── api/         ← Supabase calls, no React imports
@@ -261,18 +261,21 @@ Execute simultaneously when operations have no shared dependencies — e.g. read
   - `priority` enum: `niedrig | mittel | hoch`.
   - `position`: fractional index for drag-reorder within a column (write the midpoint between neighbours).
 - **task_assignees**: `(task_id, user_id) PK`. Many-to-many **Verantwortliche**, assigned from board members.
+- **note** (Notiz): `id, board_id, title, snapshot_b64, snapshot_up_to_id, created_by, created_at, updated_at`. Board-scoped collaborative document backed by a Yjs CRDT. Editor is Tiptap 3 on a `Y.XmlFragment`; markdown is an input shortcut only, never the stored form and not an export format (export was dropped as a goal).
+- **note_updates**: append-only log of Yjs updates, `(id bigserial, note_id, update_b64, created_at)`. Both the durable store and the sync transport: clients subscribe to inserts via `postgres_changes` instead of a separate broadcast path. Compacted into `notes.snapshot_b64` by the SECURITY DEFINER `compact_note` RPC past 500 rows, which locks the note row (`for update`) so a lagging concurrent caller cannot move the snapshot pointer backward. A trigger rejects client writes to the snapshot columns, so the RPC is the only path to them.
 
 ### Key invariants
 - **RLS is on every table.** Sharing goes through `board_members`; membership checks use the SECURITY DEFINER helpers `is_board_member` / `is_board_owner` to avoid policy recursion. Never expose other users' boards or tasks.
 - **The service role key never reaches the client.** Only the anon key (`VITE_SUPABASE_ANON_KEY`).
 - **Joining is by share code** through the `join_board_by_code` RPC. The client never inserts into `board_members` directly. Owners rotate the code (`regenerate_join_code`) and rename/delete the board (owner-only).
 - **Optimistic updates on every mutation.** Drag-to-move must feel instant.
-- **Offline-first for the board surface.** Reads hydrate from IndexedDB on cold offline launch; task writes pause offline and resume on reconnect. The allowlist in `query-client.ts` persists only board/task/member/profile reads and `tasks` mutations — never the auth session or join/sharing calls. Register a feature's resumable mutation defaults in `main.tsx` before the persister resumes.
+- **Offline-first for the board surface.** Reads hydrate from IndexedDB on cold offline launch; task writes and note-update appends pause offline and resume on reconnect through `DURABLE_MUTATION_ROOTS` (`tasks`, `notes`) in `query-client.ts`. The allowlist persists only board/task/note/member/profile reads plus those two mutation roots, never the auth session or join/sharing calls. A note's `Y.Doc` also persists locally via `y-indexeddb`, independent of the query cache. Register a feature's resumable mutation defaults in `main.tsx` before the persister resumes.
 - **Realtime invalidates queries.** Never manually merge `postgres_changes` payloads into the cache.
 - **UI never imports `api/` directly.** Always go through a hook.
 - **The four columns are fixed.** No column CRUD; they are a Postgres enum plus `TASK_COLUMNS`.
 - **Sign-in is passwordless** (magic link + 6-digit OTP fallback). **Self-serve signup is disabled** (`enable_signup = false`; `GOTRUE_DISABLE_SIGNUP=true` in prod). An operator adds users via Studio / admin API. Identity source of truth is `public.profiles`, seeded by an `on_auth_user_created` trigger.
 - **A task belongs to exactly one board and one column**; assignees must be members of that board. Deleting a board cascades its tasks and assignees.
+- **Note carets ride broadcast, never Presence.** Self-hosted Realtime caps a client at 5 presence calls per 30 seconds, and `y-protocols` awareness is already a presence protocol with its own clock and peer expiry. Awareness updates go out as binary broadcast, throttled at 100ms on the send, and a removal always bypasses the throttle.
 - **Surgical changes.** Every changed line traces to the request. Don't refactor adjacent code; match existing style. Notice unrelated dead code, mention it, leave it.
 
 ### Rules (`.claude/rules/`)

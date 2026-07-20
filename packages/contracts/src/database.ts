@@ -69,6 +69,83 @@ export type Database = {
         }
         Relationships: []
       }
+      note_updates: {
+        Row: {
+          created_at: string
+          id: number
+          note_id: string
+          update_b64: string
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          note_id: string
+          update_b64: string
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          note_id?: string
+          update_b64?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_note_updates_note"
+            columns: ["note_id"]
+            isOneToOne: false
+            referencedRelation: "notes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notes: {
+        Row: {
+          board_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          snapshot_b64: string | null
+          snapshot_up_to_id: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          board_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          snapshot_b64?: string | null
+          snapshot_up_to_id?: number
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          board_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          snapshot_b64?: string | null
+          snapshot_up_to_id?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_notes_board"
+            columns: ["board_id"]
+            isOneToOne: false
+            referencedRelation: "boards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_notes_created_by"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
@@ -168,6 +245,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      compact_note: {
+        Args: { p_note_id: string; p_snapshot_b64: string; p_up_to_id: number }
+        Returns: undefined
+      }
       create_board: {
         Args: { p_name: string }
         Returns: {

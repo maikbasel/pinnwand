@@ -14,6 +14,7 @@ export function initialsForEmail(value: string | null): string {
 }
 
 type AccountIdentity = {
+  identityId: string;
   identityName: string;
   identityEmail: string | null;
   identityInitials: string;
@@ -24,6 +25,7 @@ export function useAccountIdentity(): AccountIdentity {
   const email = user?.email ?? null;
   const identityName = email?.split("@")[0] ?? "";
   return {
+    identityId: user?.id ?? "",
     identityName,
     identityEmail: email,
     identityInitials: initialsForEmail(email),

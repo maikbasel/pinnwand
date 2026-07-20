@@ -1,5 +1,6 @@
 import { useBoardMembers } from "@/features/members";
 import { Avatar, AvatarFallback } from "@/shared/components/ui/avatar";
+import { colorForUser } from "@/shared/lib/user-color";
 
 const MAX_SHOWN = 3;
 
@@ -27,7 +28,10 @@ export function AssigneeAvatars({
         const name = members.find((m) => m.userId === id)?.displayName ?? "";
         return (
           <Avatar className="size-6 ring-2 ring-card" key={id}>
-            <AvatarFallback className="bg-primary text-[10px] text-primary-foreground">
+            <AvatarFallback
+              className="text-[10px] text-white"
+              style={{ backgroundColor: colorForUser(id) }}
+            >
               {initials(name)}
             </AvatarFallback>
           </Avatar>
