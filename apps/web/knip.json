@@ -11,6 +11,7 @@
   "ignoreDependencies": [
     "@biomejs/biome",
     "tailwindcss",
+    "@tailwindcss/typography",
     "@fontsource-variable/inter",
     "tw-animate-css",
     "shadcn",
