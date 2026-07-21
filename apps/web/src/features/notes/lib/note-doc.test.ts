@@ -3,7 +3,13 @@ import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 import { appendNoteUpdate } from "../api/notes";
 import type { Note, NoteUpdate } from "../types";
 import { toBase64 } from "./bytes";
-import { applyUpdates, hydrateDoc, NoteSync, resyncPlan } from "./note-doc";
+import {
+  applyUpdates,
+  deliverableUpdateRow,
+  hydrateDoc,
+  NoteSync,
+  resyncPlan,
+} from "./note-doc";
 
 vi.mock("../api/notes", () => ({
   appendNoteUpdate: vi.fn(),
@@ -109,6 +115,32 @@ describe("resyncPlan", () => {
       needsSnapshot: true,
       afterId: 0,
     });
+  });
+});
+
+describe("deliverableUpdateRow", () => {
+  it("returns the row when the payload carries the update", () => {
+    expect(
+      deliverableUpdateRow({
+        errors: null,
+        new: { id: 7, update_b64: "AAECAw==" },
+      })
+    ).toEqual({ id: 7, update_b64: "AAECAw==" });
+  });
+
+  it("returns null when a large paste is truncated to an errors payload", () => {
+    // Realtime drops the row's columns and sets errors when the record exceeds
+    // its max payload size (~1MB) — the shape a big paste arrives in.
+    expect(
+      deliverableUpdateRow({
+        errors: ["Error 413: Payload Too Large"],
+        new: {},
+      })
+    ).toBeNull();
+  });
+
+  it("returns null when update_b64 is missing even without an errors array", () => {
+    expect(deliverableUpdateRow({ errors: null, new: { id: 7 } })).toBeNull();
   });
 });
 

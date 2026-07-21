@@ -9,7 +9,11 @@ import { supabase } from "@/shared/lib/supabase";
 import { NOTE_MUTATION_KEYS } from "../api/notes";
 import { connectAwareness } from "../lib/awareness-channel";
 import { fromBase64 } from "../lib/bytes";
-import { NoteSync, noteDocDatabaseName } from "../lib/note-doc";
+import {
+  deliverableUpdateRow,
+  NoteSync,
+  noteDocDatabaseName,
+} from "../lib/note-doc";
 import type { ResumableNoteMutation } from "../mutation-defaults";
 
 export type NoteDocStatus = "loading" | "ready" | "error";
@@ -103,7 +107,14 @@ export function useNoteDoc(noteId: string, boardId: string): NoteDocHandle {
           filter: `note_id=eq.${noteId}`,
         },
         (message) => {
-          const row = message.new as { id: number; update_b64: string };
+          const row = deliverableUpdateRow(message);
+          // A large paste can push the row past Realtime's max payload size, so
+          // the change arrives with its columns dropped. Pull the update from
+          // the durable log over HTTP rather than decoding a missing value.
+          if (!row) {
+            sync.resync().catch(onError);
+            return;
+          }
           transact(
             doc,
             () =>
