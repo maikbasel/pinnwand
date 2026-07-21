@@ -131,6 +131,22 @@ export function TaskDetailSheet({
     patchTaskField({ title: nextTitle });
   }
 
+  // Description is the one field that batches its write to blur. A close can
+  // drop focus without a blur ever firing — mobile swipe-dismiss, outside-click
+  // — which would strand an unsaved edit. Flush it on the way out so no close
+  // path loses it. Idempotent with the blur write: after a blur save mode.task
+  // already carries the new value, so the guard makes this a no-op.
+  function handleOpenChange(next: boolean): void {
+    if (
+      !next &&
+      mode.kind === "edit" &&
+      form.description !== mode.task.description
+    ) {
+      patchTaskField({ description: form.description });
+    }
+    onOpenChange(next);
+  }
+
   async function createFromForm(): Promise<void> {
     const title = form.title.trim();
     if (busy || title === "") {
@@ -305,7 +321,7 @@ export function TaskDetailSheet({
 
   if (isDesktop) {
     return (
-      <Sheet onOpenChange={onOpenChange} open={open}>
+      <Sheet onOpenChange={handleOpenChange} open={open}>
         <SheetContent
           className="w-full overflow-y-auto sm:max-w-md"
           side="right"
@@ -321,7 +337,7 @@ export function TaskDetailSheet({
   }
 
   return (
-    <Drawer onOpenChange={onOpenChange} open={open}>
+    <Drawer onOpenChange={handleOpenChange} open={open}>
       {/* dvh, not vh: the dynamic viewport shrinks when the soft keyboard
           opens, so the drawer stays above the keyboard instead of extending
           behind it. */}

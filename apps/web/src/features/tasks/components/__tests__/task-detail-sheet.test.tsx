@@ -182,4 +182,20 @@ describe("TaskDetailSheet (edit)", () => {
       })
     );
   });
+
+  it("flushes a pending description edit when the sheet closes without a blur", async () => {
+    // A close path that drops focus without firing blur (mobile swipe-dismiss,
+    // outside-click) must not strand the edit. Escape closes the sheet straight
+    // from the focused textarea, so the flush-on-close carries the write.
+    renderSheet({ kind: "edit", task: SAMPLE_TASK });
+    const input = screen.getByLabelText(TASK_DESCRIPTION_LABEL);
+    await userEvent.type(input, "Ungespeichert");
+    await userEvent.keyboard("{Escape}");
+    expect(updateTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: SAMPLE_TASK.id,
+        description: "Ungespeichert",
+      })
+    );
+  });
 });
