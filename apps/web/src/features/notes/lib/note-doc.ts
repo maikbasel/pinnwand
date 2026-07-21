@@ -22,6 +22,28 @@ export function noteDocDatabaseName(noteId: string): string {
   return `note:${noteId}`;
 }
 
+/**
+ * A `note_updates` INSERT whose row exceeds Realtime's max payload size
+ * (~1MB by default) arrives with its columns stripped and an `errors` array
+ * instead of the bytes — this is how a large paste manifests. Decoding the
+ * absent `update_b64` would throw and the peer would silently miss the paste.
+ * Returns the usable row, or null when the payload was truncated so the caller
+ * can fall back to fetching the update from the durable log over HTTP.
+ */
+export function deliverableUpdateRow(message: {
+  errors: string[] | null;
+  new: Record<string, unknown>;
+}): { id: number; update_b64: string } | null {
+  if (message.errors !== null && message.errors.length > 0) {
+    return null;
+  }
+  const { id, update_b64 } = message.new;
+  if (typeof id === "number" && typeof update_b64 === "string") {
+    return { id, update_b64 };
+  }
+  return null;
+}
+
 export function applyUpdates(doc: Doc, updates: NoteUpdate[]): number {
   let highest = 0;
   for (const entry of updates) {

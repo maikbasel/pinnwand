@@ -3,7 +3,6 @@ import {
   ADD_TASK_LABEL,
   ADD_TASK_SUBMIT,
   DELETE_TASK_LABEL,
-  SAVE_TASK_LABEL,
   TASK_DELETED_TOAST,
   TASK_TITLE_LABEL,
   TASK_TITLE_PLACEHOLDER,
@@ -141,14 +140,10 @@ export class BoardDetailPage {
     await input.press("ControlOrMeta+a");
     await input.press("Delete");
     await input.pressSequentially(newTitle);
-    // The title commits inline on Enter (decoupled from Speichern).
+    // The title commits inline on Enter (decoupled from Speichern) as an
+    // immediate optimistic write, so the renamed header renders right away.
+    // Waiting for it confirms the rename took effect before handing back.
     await input.press("Enter");
-    // Wait for that commit to render before handing back. Speichern is disabled
-    // while the write is in flight, and clickSheetAction dispatches its click
-    // rather than performing one, so a caller that clicks straight after Enter
-    // can fire into the disabled window and have the action dropped, leaving
-    // the sheet open. Seeing the new title back in the field means the write
-    // settled and the button is live again.
     await expect(
       this.sheet.getByRole("button", { name: newTitle, exact: true })
     ).toBeVisible();
@@ -162,33 +157,18 @@ export class BoardDetailPage {
       .click();
   }
 
-  async saveTask(): Promise<void> {
-    await this.clickSheetAction(SAVE_TASK_LABEL);
+  // Edit mode auto-saves every field, so there is no Save button. Closing the
+  // sheet lets the assertions read the board behind it. Escape dismisses both
+  // the desktop Sheet and the mobile Drawer.
+  async closeSheet(): Promise<void> {
+    await this.page.keyboard.press("Escape");
+    await expect(this.sheet).toBeHidden();
   }
 
   // Routes through the deferred-delete flow: closes the sheet, hides the card,
   // and raises the Undo snackbar.
   async deleteViaSheet(): Promise<void> {
-    await this.clickSheetAction(DELETE_TASK_LABEL);
-  }
-
-  // The mobile detail sheet is a vaul Drawer whose transform/clip layer wins the
-  // pointer hit-test over its own bottom actions, so a real click never lands
-  // (the drawer content intercepts at every point of the button). A phone user
-  // taps it fine — this is a Playwright-vs-vaul quirk — so dispatch the click
-  // directly, which fires React's onClick. The caller's outcome assertion (card
-  // moved / deleted) still gates that the action actually took effect.
-  private async clickSheetAction(name: string): Promise<void> {
-    const button = this.sheet.getByRole("button", { name });
-    // dispatchEvent bypasses Playwright's actionability checks, so it fires
-    // React's onClick even while the button is disabled. Speichern is disabled
-    // whenever a task mutation is in flight, including the inline title commit
-    // that editTitle triggers on Enter, and the handler bails out on that same
-    // busy flag. Dispatching into that window silently does nothing and leaves
-    // the sheet open. Waiting for the enabled state restores the one guarantee
-    // a real click would have given us.
-    await expect(button).toBeEnabled();
-    await button.dispatchEvent("click");
+    await this.sheet.getByRole("button", { name: DELETE_TASK_LABEL }).click();
   }
 }
 
