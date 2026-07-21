@@ -35,19 +35,20 @@ test("a member creates, edits, moves, and deletes a task", async ({
     await boardDetailPage.addTask(OFFEN, title);
     await expect(boardDetailPage.cardInColumn(OFFEN, title)).toBeVisible();
 
-    // Edit: renaming through the detail sheet updates the card in place.
+    // Edit: renaming through the detail sheet auto-saves and updates the card
+    // in place (the inline title commits on its own, no Save button).
     await boardDetailPage.openTask(title);
     await boardDetailPage.editTitle(title, editedTitle);
-    await boardDetailPage.saveTask();
+    await boardDetailPage.closeSheet();
     await expect(
       boardDetailPage.cardInColumn(OFFEN, editedTitle)
     ).toBeVisible();
 
-    // Move: switching the sheet's Status relocates the card to the target
-    // column and clears it from the origin.
+    // Move: switching the sheet's Status auto-saves the move, relocating the
+    // card to the target column and clearing it from the origin.
     await boardDetailPage.openTask(editedTitle);
     await boardDetailPage.setStatus(ERLEDIGT);
-    await boardDetailPage.saveTask();
+    await boardDetailPage.closeSheet();
     await expect(
       boardDetailPage.cardInColumn(ERLEDIGT, editedTitle)
     ).toBeVisible();

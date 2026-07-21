@@ -31,7 +31,7 @@ import { useMediaQuery } from "@/shared/hooks/use-media-query";
 import { useCreateTask } from "../hooks/use-create-task";
 import { useMoveTask } from "../hooks/use-move-task";
 import { useSetAssignees } from "../hooks/use-set-assignees";
-import { useUpdateTask } from "../hooks/use-update-task";
+import { type UpdateTaskVars, useUpdateTask } from "../hooks/use-update-task";
 import {
   CLOSE_LABEL,
   CREATE_TASK_TITLE,
@@ -109,68 +109,41 @@ export function TaskDetailSheet({
     mode.kind === "edit" ? mode.task.assigneeIds : []
   );
 
-  const busy =
-    createTask.isPending || updateTask.isPending || moveTask.isPending;
-  // Create needs a non-empty title before Save; in edit mode the title is
-  // committed inline (immediately), so it is never part of this gate.
-  const canSave = mode.kind === "create" ? form.title.trim() !== "" : true;
+  // Only create has a submit button to gate; edit mode auto-saves every field.
+  const busy = createTask.isPending;
+  const canCreate = form.title.trim() !== "";
 
-  // Inline title commit (edit mode): an immediate optimistic write, decoupled
-  // from Save, mirroring how assignees write on their own. The other fields are
-  // sent at their last-persisted values so an in-progress (unsaved) body edit is
-  // never flushed early by a title change.
-  async function commitTitle(nextTitle: string): Promise<void> {
+  // Edit mode auto-saves each field the moment it changes, one patch per field,
+  // mirroring how the inline title and the assignees already write on their own.
+  // Fire-and-forget: updateTask patches the cache optimistically and rolls back
+  // with the global toast on failure. A no-op in create mode, where fields are
+  // collected in `form` and inserted together by `createFromForm`.
+  function patchTaskField(patch: Omit<UpdateTaskVars, "taskId">): void {
     if (mode.kind !== "edit") {
       return;
     }
-    try {
-      await updateTask.mutateAsync({
-        taskId: mode.task.id,
-        title: nextTitle,
-        description: mode.task.description,
-        priority: mode.task.priority,
-        dueDate: mode.task.dueDate,
-      });
-    } catch {
-      // Optimistic update rolled back; the global toast surfaces the error.
-    }
+    updateTask.mutate({ taskId: mode.task.id, ...patch });
   }
 
-  async function save(): Promise<void> {
-    // Create owns the title; in edit mode the inline field already committed it,
-    // so Save leaves it alone. Re-sending it here would push whatever the sheet
-    // last read back to the server, which right after an inline rename is still
-    // the old name and silently undoes the rename.
-    const title = mode.kind === "create" ? form.title.trim() : null;
+  // Inline title commit (edit mode): an immediate optimistic write, decoupled
+  // from the rest, sending only the title.
+  function commitTitle(nextTitle: string): void {
+    patchTaskField({ title: nextTitle });
+  }
+
+  async function createFromForm(): Promise<void> {
+    const title = form.title.trim();
     if (busy || title === "") {
       return;
     }
-    const dueDate = form.dueDate === "" ? null : form.dueDate;
     try {
-      if (mode.kind === "create") {
-        await createTask.mutateAsync({
-          column: form.column,
-          title: title ?? "",
-          description: form.description,
-          priority: form.priority,
-          dueDate,
-        });
-      } else {
-        await updateTask.mutateAsync({
-          taskId: mode.task.id,
-          description: form.description,
-          priority: form.priority,
-          dueDate,
-        });
-        // A column change in edit mode is a move (recomputes position in the
-        // target column), so it goes through moveTask rather than updateTask.
-        if (form.column !== mode.task.column) {
-          await moveTask.mutateAsync({
-            taskId: mode.task.id,
-            toColumn: form.column,
-          });
-        }
-      }
+      await createTask.mutateAsync({
+        column: form.column,
+        title,
+        description: form.description,
+        priority: form.priority,
+        dueDate: form.dueDate === "" ? null : form.dueDate,
+      });
       onOpenChange(false);
     } catch {
       // Optimistic update rolled back; the global toast surfaces the error.
@@ -186,6 +159,16 @@ export function TaskDetailSheet({
         </Label>
         <Textarea
           id="task-desc"
+          // Persist on blur, not per keystroke: one write when the user leaves
+          // the field, and only if it actually changed.
+          onBlur={() => {
+            if (
+              mode.kind === "edit" &&
+              form.description !== mode.task.description
+            ) {
+              patchTaskField({ description: form.description });
+            }
+          }}
           onChange={(event) =>
             setForm((current) => ({
               ...current,
@@ -204,11 +187,15 @@ export function TaskDetailSheet({
           className="flex-col md:flex-row"
           onValueChange={(value) => {
             const next = value[0];
-            if (next) {
-              setForm((current) => ({
-                ...current,
-                column: next as TaskColumnId,
-              }));
+            if (!next || next === form.column) {
+              return;
+            }
+            const column = next as TaskColumnId;
+            setForm((current) => ({ ...current, column }));
+            // A column change is a move: it recomputes position in the target
+            // column, so it goes through moveTask rather than a field patch.
+            if (mode.kind === "edit") {
+              moveTask.mutate({ taskId: mode.task.id, toColumn: column });
             }
           }}
           value={[form.column]}
@@ -228,12 +215,12 @@ export function TaskDetailSheet({
         <ToggleGroup
           onValueChange={(value) => {
             const next = value[0];
-            if (next) {
-              setForm((current) => ({
-                ...current,
-                priority: next as TaskPriorityId,
-              }));
+            if (!next || next === form.priority) {
+              return;
             }
+            const priority = next as TaskPriorityId;
+            setForm((current) => ({ ...current, priority }));
+            patchTaskField({ priority });
           }}
           value={[form.priority]}
         >
@@ -245,9 +232,10 @@ export function TaskDetailSheet({
         </ToggleGroup>
       </div>
       <DueDateField
-        onChange={(next) =>
-          setForm((current) => ({ ...current, dueDate: next }))
-        }
+        onChange={(next) => {
+          setForm((current) => ({ ...current, dueDate: next }));
+          patchTaskField({ dueDate: next === "" ? null : next });
+        }}
         value={form.dueDate}
       />
       {/* Assignees write immediately (they need a persisted task id), so the
@@ -263,9 +251,17 @@ export function TaskDetailSheet({
           value={assigneeIds}
         />
       ) : null}
-      <Button disabled={busy || !canSave} onClick={save} type="button">
-        {SAVE_TASK_LABEL}
-      </Button>
+      {/* Create collects the whole form behind one submit (the task does not
+          exist yet). Edit mode has no Save button: every field auto-saves. */}
+      {mode.kind === "create" ? (
+        <Button
+          disabled={busy || !canCreate}
+          onClick={createFromForm}
+          type="button"
+        >
+          {SAVE_TASK_LABEL}
+        </Button>
+      ) : null}
       {/* Delete routes through the deferred-delete flow: the sheet closes, the
           card vanishes, and an undo snackbar holds the real DELETE for ~5s. */}
       {mode.kind === "edit" ? (

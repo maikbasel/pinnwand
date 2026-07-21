@@ -117,30 +117,32 @@ export async function createTask(
   return toTask(TaskRowSchema.parse(data));
 }
 
+// Every field is optional: the detail sheet auto-saves one field at a time, so
+// each write carries only what changed and leaves the rest untouched. `dueDate`
+// distinguishes null (clear the date) from undefined (don't touch it).
 const UpdateTaskInput = z.object({
   taskId: z.uuid(),
-  // Optional so a caller that does not own the title can leave it alone. The
-  // detail sheet's inline field commits the title on its own; Save omits it
-  // rather than re-sending a value that may lag behind that commit and write
-  // the pre-edit name back over a rename.
   title: z.string().trim().min(1).max(200).optional(),
-  description: z.string().max(5000),
-  priority: TaskPrioritySchema,
-  dueDate: z.string().nullable(),
+  description: z.string().max(5000).optional(),
+  priority: TaskPrioritySchema.optional(),
+  dueDate: z.string().nullable().optional(),
 });
 
 export async function updateTask(
   input: z.input<typeof UpdateTaskInput>
 ): Promise<Task> {
   const parsed = UpdateTaskInput.parse(input);
+  const patch = {
+    ...(parsed.title === undefined ? {} : { title: parsed.title }),
+    ...(parsed.description === undefined
+      ? {}
+      : { description: parsed.description }),
+    ...(parsed.priority === undefined ? {} : { priority: parsed.priority }),
+    ...(parsed.dueDate === undefined ? {} : { due_date: parsed.dueDate }),
+  };
   const { data, error } = await supabase
     .from("tasks")
-    .update({
-      ...(parsed.title === undefined ? {} : { title: parsed.title }),
-      description: parsed.description,
-      priority: parsed.priority,
-      due_date: parsed.dueDate,
-    })
+    .update(patch)
     .eq("id", parsed.taskId)
     .select(TASK_SELECT)
     .single();

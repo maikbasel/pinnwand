@@ -29,14 +29,15 @@ export type CreateTaskMutation = {
   position: number;
 };
 
+// Every editable field is optional: the detail sheet auto-saves one field at a
+// time, so each update carries only what changed (see UpdateTaskInput).
 export type UpdateTaskMutation = {
   op: "update";
   taskId: string;
-  // Omitted when the caller does not own the title (see UpdateTaskInput).
   title?: string;
-  description: string;
-  priority: TaskPriorityId;
-  dueDate: string | null;
+  description?: string;
+  priority?: TaskPriorityId;
+  dueDate?: string | null;
 };
 
 export type MoveTaskMutation = {

@@ -1,3 +1,4 @@
+import { TASK_PRIORITIES } from "@pinnwand/contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -6,8 +7,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CREATE_TASK_TITLE,
   SAVE_TASK_LABEL,
+  TASK_DESCRIPTION_LABEL,
   TASK_TITLE_LABEL,
 } from "../../lib/copy";
+
+// Priorities are a fixed enum; "hoch" is the last of the three (see the screen).
+const HOCH_LABEL = TASK_PRIORITIES[2].label;
 
 // Defined inside the factory (not referencing an outer const) because vi.mock is
 // hoisted above module-level declarations.
@@ -145,5 +150,36 @@ describe("TaskDetailSheet (edit)", () => {
     await userEvent.type(input, "Verworfen");
     await userEvent.keyboard("{Escape}");
     expect(updateTask).not.toHaveBeenCalled();
+  });
+
+  it("has no Speichern button — edit mode auto-saves", () => {
+    renderSheet({ kind: "edit", task: SAMPLE_TASK });
+    expect(
+      screen.queryByRole("button", { name: SAVE_TASK_LABEL })
+    ).not.toBeInTheDocument();
+  });
+
+  it("auto-saves a priority change immediately", async () => {
+    renderSheet({ kind: "edit", task: SAMPLE_TASK });
+    await userEvent.click(screen.getByRole("button", { name: HOCH_LABEL }));
+    expect(updateTask).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: SAMPLE_TASK.id, priority: "hoch" })
+    );
+  });
+
+  it("auto-saves the description on blur, once, only when it changed", async () => {
+    renderSheet({ kind: "edit", task: SAMPLE_TASK });
+    const input = screen.getByLabelText(TASK_DESCRIPTION_LABEL);
+    await userEvent.type(input, "Neue Beschreibung");
+    // Not yet — the write waits for blur, not per keystroke.
+    expect(updateTask).not.toHaveBeenCalled();
+    await userEvent.tab();
+    expect(updateTask).toHaveBeenCalledTimes(1);
+    expect(updateTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: SAMPLE_TASK.id,
+        description: "Neue Beschreibung",
+      })
+    );
   });
 });
