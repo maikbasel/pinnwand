@@ -203,6 +203,11 @@ export function SidebarRail() {
                                   ? "page"
                                   : undefined
                               }
+                              // Rendered as a <button> (a form control), which
+                              // sizes to its content rather than stretching like
+                              // the default <a>, so w-full makes the row and its
+                              // active highlight span the list width.
+                              className="w-full"
                               isActive={membership.board.id === activeBoardId}
                               onClick={() => openBoard(membership.board.id)}
                               render={<button type="button" />}
